@@ -1,0 +1,213 @@
+@import "tailwindcss";
+
+/* Light (default for SSR; .dark applied by theme script before paint) */
+:root {
+  color-scheme: light;
+
+  --bg-page: #f5f5f5;
+  --bg-body: #f5f5f5;
+  --bg-nav: #ffffff;
+  --bg-input: #ffffff;
+  --bg-button: #f0f0f0;
+  --bg-button-hover: #e5e5e5;
+  --bg-primary: #171717;
+  --bg-primary-hover: #262626;
+  --bg-status: #fafafa;
+  --bg-log: #fafafa;
+  --bg-chat-transcript: #ffffff;
+  --bg-chat-user: #f0f0f0;
+  --bg-chat-assistant: #f5f5f5;
+  --bg-chat-system: #fef2f2;
+  --bg-chat-stream: #fafafa;
+
+  --border-default: #e5e5e5;
+  --border-muted: #d4d4d4;
+  --border-input: #d4d4d4;
+  --border-button: #d4d4d4;
+  --border-primary: #404040;
+  --border-status: #e5e5e5;
+  --border-log: #e5e5e5;
+  --border-chat: #e5e5e5;
+  --border-stream: #d4d4d4;
+
+  --border-chat-user: #a3a3a3;
+  --border-chat-assistant: #737373;
+  --border-chat-system: #f87171;
+
+  --text-primary: #171717;
+  --text-body: #171717;
+  --text-brand: #0a0a0a;
+  --text-muted: #525252;
+  --text-nav: #525252;
+  --text-nav-hover: #171717;
+  --text-nav-active: #0a0a0a;
+  --text-status-off: #737373;
+  --text-status-on: #404040;
+  --text-hint: #737373;
+  --text-legend: #737373;
+  --text-label: #404040;
+  --text-link: #525252;
+  --text-link-hover: #171717;
+  --text-log-heading: #737373;
+  --text-primary-button: #fafafa;
+  --text-stream: #525252;
+  --text-chat-system: #b91c1c;
+  --text-err: #b91c1c;
+
+  --status-ok-border: #d4d4d4;
+  --status-ok-text: #404040;
+  --status-err-border: #fca5a5;
+  --status-err-text: #b91c1c;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --bg-page: #000000;
+  --bg-body: #000000;
+  --bg-nav: #050505;
+  --bg-input: #0a0a0a;
+  --bg-button: #141414;
+  --bg-button-hover: #1f1f1f;
+  --bg-primary: #0a0a0a;
+  --bg-primary-hover: #171717;
+  --bg-status: #0a0a0a;
+  --bg-log: #000000;
+  --bg-chat-transcript: #050505;
+  --bg-chat-user: #111111;
+  --bg-chat-assistant: #0c0c0c;
+  --bg-chat-system: #141010;
+  --bg-chat-stream: #0a0a0a;
+
+  --border-default: #1f1f1f;
+  --border-muted: #262626;
+  --border-input: #2a2a2a;
+  --border-button: #333333;
+  --border-primary: #404040;
+  --border-status: #2a2a2a;
+  --border-log: #262626;
+  --border-chat: #262626;
+  --border-stream: #333333;
+
+  --border-chat-user: #404040;
+  --border-chat-assistant: #525252;
+  --border-chat-system: #6b3030;
+
+  --text-primary: #e4e4e4;
+  --text-body: #e4e4e4;
+  --text-brand: #f5f5f5;
+  --text-muted: #8c8c8c;
+  --text-nav: #a3a3a3;
+  --text-nav-hover: #e4e4e4;
+  --text-nav-active: #fafafa;
+  --text-status-off: #525252;
+  --text-status-on: #a3a3a3;
+  --text-hint: #8c8c8c;
+  --text-legend: #737373;
+  --text-label: #b5b5b5;
+  --text-link: #d4d4d4;
+  --text-link-hover: #fafafa;
+  --text-log-heading: #737373;
+  --text-primary-button: #fafafa;
+  --text-stream: #a3a3a3;
+  --text-chat-system: #d4a5a5;
+  --text-err: #e7a3a3;
+
+  --status-ok-border: #3f3f3f;
+  --status-ok-text: #a3a3a3;
+  --status-err-border: #5c2a2a;
+  --status-err-text: #e7a3a3;
+}
+
+@theme {
+  --font-sans: system-ui, sans-serif;
+
+  --color-background: var(--bg-body);
+  --color-foreground: var(--text-body);
+
+  --color-muted: var(--text-muted);
+  --color-border: var(--border-default);
+  --color-border-muted: var(--border-muted);
+  --color-border-input: var(--border-input);
+  --color-border-button: var(--border-button);
+  --color-border-primary: var(--border-primary);
+  --color-border-status: var(--border-status);
+  --color-border-log: var(--border-log);
+  --color-border-chat: var(--border-chat);
+  --color-border-stream: var(--border-stream);
+
+  --color-surface-nav: var(--bg-nav);
+  --color-surface-input: var(--bg-input);
+  --color-surface-button: var(--bg-button);
+  --color-surface-button-hover: var(--bg-button-hover);
+  --color-surface-status: var(--bg-status);
+  --color-surface-log: var(--bg-log);
+  --color-surface-chat: var(--bg-chat-transcript);
+  --color-surface-chat-stream: var(--bg-chat-stream);
+  --color-surface-chat-user: var(--bg-chat-user);
+  --color-surface-chat-assistant: var(--bg-chat-assistant);
+  --color-surface-chat-system: var(--bg-chat-system);
+
+  --color-brand: var(--text-brand);
+  --color-heading: var(--text-primary);
+  --color-nav: var(--text-nav);
+  --color-nav-hover: var(--text-nav-hover);
+  --color-nav-active: var(--text-nav-active);
+  --color-status-on: var(--text-status-on);
+  --color-status-off: var(--text-status-off);
+  --color-hint: var(--text-hint);
+  --color-legend: var(--text-legend);
+  --color-label: var(--text-label);
+  --color-link: var(--text-link);
+  --color-link-hover: var(--text-link-hover);
+  --color-log-heading: var(--text-log-heading);
+  --color-primary-fg: var(--text-primary-button);
+  --color-stream: var(--text-stream);
+  --color-chat-system: var(--text-chat-system);
+  --color-err: var(--text-err);
+
+  --color-primary: var(--bg-primary);
+  --color-primary-hover: var(--bg-primary-hover);
+
+  --color-ok-border: var(--status-ok-border);
+  --color-ok-text: var(--status-ok-text);
+  --color-err-border: var(--status-err-border);
+  --color-err-text: var(--status-err-text);
+
+  --color-accent-chat-user: var(--border-chat-user);
+  --color-accent-chat-assistant: var(--border-chat-assistant);
+  --color-accent-chat-system: var(--border-chat-system);
+}
+
+@layer base {
+  body {
+    @apply min-h-screen bg-background text-foreground font-sans antialiased;
+    line-height: 1.45;
+  }
+
+  /*
+   * Preflight sets `appearance: button` on buttons, which can override our
+   * background colors with the OS accent (e.g. macOS blue).
+   */
+  button,
+  input:where([type="button"], [type="reset"], [type="submit"]) {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input[type="checkbox"] {
+    accent-color: var(--text-muted);
+  }
+}
+
+/* Pseudo-selectors that are awkward in utility-only markup */
+@layer components {
+  .chat-stream:empty {
+    display: none;
+  }
+
+  .chat-stream:not(:empty)::before {
+    content: "… ";
+    opacity: 0.6;
+  }
+}
