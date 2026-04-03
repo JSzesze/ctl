@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { readOpenclawControlUiSettings } from "@/config/openclaw-control-ui-import";
 import { STORAGE_THEME } from "@/config/storage-keys";
 import {
   applyThemePreferenceToDocument,
@@ -36,6 +37,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(STORAGE_THEME);
       if (isThemePreference(raw)) {
         next = raw;
+      } else {
+        const imported = readOpenclawControlUiSettings()?.themePreference;
+        if (imported) {
+          next = imported;
+        }
       }
     } catch {
       /* private mode */

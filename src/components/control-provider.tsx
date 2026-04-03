@@ -14,6 +14,7 @@ import {
   type SetStateAction,
 } from "react";
 import { loadPersistedConnectionForm } from "@/config/load-connection-form";
+import { readOpenclawControlUiSettings } from "@/config/openclaw-control-ui-import";
 import { STORAGE_GATEWAY_TOKEN, STORAGE_GATEWAY_WS_URL, STORAGE_SESSION_KEY } from "@/config/storage-keys";
 import {
   applyChatGatewayEvent,
@@ -59,6 +60,8 @@ export type ControlContextValue = {
   handleSendChat: () => Promise<void>;
   handleStopChat: () => Promise<void>;
   clearLog: () => void;
+  /** Typed gateway RPC when connected (same wire as stock Control UI). */
+  rpc: (method: string, params?: unknown) => Promise<unknown>;
 };
 
 const ControlContext = createContext<ControlContextValue | null>(null);
@@ -151,8 +154,15 @@ export function ControlProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const form = loadPersistedConnectionForm();
-    chatModelRef.current = createChatModel(localStorage.getItem(STORAGE_SESSION_KEY) ?? "");
-    setSessionKey(localStorage.getItem(STORAGE_SESSION_KEY) ?? "");
+    let initialSession = localStorage.getItem(STORAGE_SESSION_KEY)?.trim() ?? "";
+    if (!initialSession) {
+      const imported = readOpenclawControlUiSettings()?.sessionKey?.trim();
+      if (imported) {
+        initialSession = imported;
+      }
+    }
+    chatModelRef.current = createChatModel(initialSession);
+    setSessionKey(initialSession);
     setGatewayUrl(form.gatewayUrl);
     setToken(form.token);
     setRemember(form.remember);
@@ -324,6 +334,15 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     setLogText("");
   }, []);
 
+  /** No generic on the arrow — in `.tsx`, `async <T>(` is parsed as JSX and breaks at runtime. */
+  const rpc = useCallback(async (method: string, params?: unknown) => {
+    const c = clientRef.current;
+    if (!c?.connected) {
+      throw new Error("Not connected to gateway");
+    }
+    return c.request(method, params);
+  }, []);
+
   const connected = connectionState === "connected";
   const connecting = connectionState === "connecting";
 
@@ -357,6 +376,7 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     handleSendChat,
     handleStopChat,
     clearLog,
+    rpc,
   };
 
   return <ControlContext.Provider value={value}>{children}</ControlContext.Provider>;

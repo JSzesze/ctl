@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { AppNav } from "@/components/app-nav";
+import { AppShell } from "@/components/app-shell";
 import { ControlProvider } from "@/components/control-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { getThemeInitScript } from "@/config/theme-init-script";
@@ -34,8 +34,7 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         <ThemeProvider>
           <ControlProvider>
-            <AppNav />
-            <main className="mx-auto max-w-[56rem] px-5 pb-10 pt-5">{children}</main>
+            <AppShell>{children}</AppShell>
           </ControlProvider>
         </ThemeProvider>
       </body>

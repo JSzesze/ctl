@@ -40,6 +40,12 @@ export function ControlConfigView() {
       <h1 className="mb-2 text-xl font-semibold text-heading">Config</h1>
       <p className="mb-4 text-sm text-hint">Gateway URL, token, and connection log for OpenClaw.</p>
       <p className="mb-4 text-sm text-hint">
+        If you have not saved anything in CTL yet, we read the same browser storage as the stock Control UI:
+        <code className="mx-1 text-foreground">openclaw.control.settings.v1</code>
+        (URL, session, appearance) and the per-gateway token in{" "}
+        <code className="text-foreground">sessionStorage</code>. CTL keys take precedence once set.
+      </p>
+      <p className="mb-4 text-sm text-hint">
         Open this app as <strong className="text-foreground">http://localhost</strong> (any port) or{" "}
         <strong className="text-foreground">https</strong> so the browser exposes WebCrypto; plain{" "}
         <code className="text-foreground">http://10.x…</code> cannot sign device identity. Set{" "}
