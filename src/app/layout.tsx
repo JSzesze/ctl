@@ -5,10 +5,18 @@ import { ControlProvider } from "@/components/control-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { getThemeInitScript } from "@/config/theme-init-script";
 import "./globals.css";
+import { Geist } from "next/font/google";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
-  title: "OpenClaw control",
-  description: "Minimal OpenClaw gateway control UI",
+  title: {
+    default: "CTL",
+    template: "%s · CTL",
+  },
+  description:
+    "Personal command station on OpenClaw—today, projects, meetings, and radar without replacing your systems of record.",
 };
 
 export default function RootLayout({
@@ -17,7 +25,7 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className={cn("dark", "font-sans", geist.variable)} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{ __html: getThemeInitScript() }}
@@ -27,7 +35,7 @@ export default function RootLayout({
         <ThemeProvider>
           <ControlProvider>
             <AppNav />
-            <main className="mx-auto max-w-[52rem] px-5 pb-8 pt-4">{children}</main>
+            <main className="mx-auto max-w-[56rem] px-5 pb-10 pt-5">{children}</main>
           </ControlProvider>
         </ThemeProvider>
       </body>

@@ -7,7 +7,7 @@ export default function NotFound() {
       <p className="mb-4 text-foreground">Page not found.</p>
       <p>
         <Link href="/" className="text-link underline underline-offset-[0.15em] hover:text-link-hover">
-          Back home
+          Back to Today
         </Link>
       </p>
     </div>

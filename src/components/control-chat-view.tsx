@@ -37,7 +37,7 @@ export function ControlChatView() {
     <>
       <h1 className="mb-2 text-xl font-semibold text-heading">Chat</h1>
       <p className="mb-4 text-sm text-hint">
-        Connect in{" "}
+        OpenClaw gateway session. Connect in{" "}
         <Link href="/config" className="text-link underline underline-offset-[0.15em] hover:text-link-hover">
           Config
         </Link>

@@ -37,7 +37,8 @@ export function ControlConfigView() {
 
   return (
     <>
-      <h1 className="mb-2 text-xl font-semibold text-heading">Configuration</h1>
+      <h1 className="mb-2 text-xl font-semibold text-heading">Config</h1>
+      <p className="mb-4 text-sm text-hint">Gateway URL, token, and connection log for OpenClaw.</p>
       <p className="mb-4 text-sm text-hint">
         Open this app as <strong className="text-foreground">http://localhost</strong> (any port) or{" "}
         <strong className="text-foreground">https</strong> so the browser exposes WebCrypto; plain{" "}
@@ -52,7 +53,7 @@ export function ControlConfigView() {
         </a>{" "}
         to this origin (e.g. <code className="text-foreground">http://localhost:3000</code>). Approve the browser with{" "}
         <code className="text-foreground">openclaw devices approve …</code> when pairing is required. Return to{" "}
-        <Link href="/" className="text-link underline underline-offset-[0.15em] hover:text-link-hover">
+        <Link href="/chat" className="text-link underline underline-offset-[0.15em] hover:text-link-hover">
           Chat
         </Link>{" "}
         after connecting.
