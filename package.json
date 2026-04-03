@@ -1,0 +1,17 @@
+{
+  "name": "openclaw-minimal-control",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@noble/ed25519": "3.0.1"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vite": "^6.3.5"
+  }
+}
