@@ -2,14 +2,14 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { btnClass } from "@/components/control-button-classes";
-import { useControl } from "@/components/control-provider";
+import { useControlConnection } from "@/components/control-provider";
 import { JsonPreview } from "@/components/openclaw/json-preview";
 import { OpenClawDisconnectedHint } from "@/components/openclaw/disconnected-hint";
 import { localIsoDate, utcOffsetLabelFromBrowser } from "@/lib/format-iso-date";
 import { GatewayRequestError } from "@/lib/openclaw";
 
 export function UsagePanel() {
-  const { connected, rpc } = useControl();
+  const { connected, rpc } = useControlConnection();
   const [startDate, setStartDate] = useState(() => localIsoDate(new Date()));
   const [endDate, setEndDate] = useState(() => localIsoDate(new Date()));
   const [sessionsUsage, setSessionsUsage] = useState<unknown>(null);
@@ -65,7 +65,7 @@ export function UsagePanel() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted">
+      <p className="text-sm text-muted-foreground">
         Session usage and cost for the selected local calendar days (same RPCs as the stock Control UI:
         <code className="mx-1 text-xs text-foreground">sessions.usage</code> and
         <code className="mx-1 text-xs text-foreground">usage.cost</code>). Requires operator scopes your

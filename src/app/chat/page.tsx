@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { ControlChatView } from "@/components/control-chat-view";
+import { OpenClawChatView } from "@/features/chat";
 
 export const metadata: Metadata = {
   title: "Chat",
 };
 
 export default function ChatPage() {
-  return <ControlChatView />;
+  return <OpenClawChatView />;
 }

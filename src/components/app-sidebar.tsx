@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Binary,
+  Bot,
   CalendarDays,
   Command,
   FolderKanban,
@@ -15,7 +16,7 @@ import {
   Timer,
   Video,
 } from "lucide-react";
-import { useControl } from "@/components/control-provider";
+import { useControlConnection } from "@/components/control-provider";
 import { ThemeCycleIconButton, ThemeToggle } from "@/components/theme-toggle";
 import {
   Sidebar,
@@ -51,6 +52,7 @@ const INTEGRATIONS: Array<{ href: string; label: string; icon: typeof Mic }> = [
 
 const OPENCLAW: Array<{ href: string; label: string; icon: typeof MessageSquare }> = [
   { href: "/chat", label: "Chat", icon: MessageSquare },
+  { href: "/agents", label: "Agents", icon: Bot },
   { href: "/usage", label: "Usage", icon: BarChart3 },
   { href: "/automation", label: "Automation", icon: Timer },
   { href: "/environment", label: "Environment", icon: Binary },
@@ -62,7 +64,7 @@ function pathActive(pathname: string, href: string): boolean {
 }
 
 function SidebarStatusAndTheme() {
-  const { connected, hydrated } = useControl();
+  const { connected, hydrated } = useControlConnection();
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
 

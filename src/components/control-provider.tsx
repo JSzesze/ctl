@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
@@ -17,23 +18,33 @@ import { loadPersistedConnectionForm } from "@/config/load-connection-form";
 import { readOpenclawControlUiSettings } from "@/config/openclaw-control-ui-import";
 import { STORAGE_GATEWAY_TOKEN, STORAGE_GATEWAY_WS_URL, STORAGE_SESSION_KEY } from "@/config/storage-keys";
 import {
+  chatDebug,
+  chatModelSnapshot,
+  getChatDebugLevel,
+  logVerbosePayload,
+  summarizeAgentWsPayload,
+  summarizeChatWsPayload,
+} from "@/features/chat/chat-debug";
+import {
+  applyAgentGatewayEvent,
   applyChatGatewayEvent,
+  applySessionMessageEvent,
   chatAbort,
   chatLoadHistory,
   chatLoadSessions,
   chatSend,
   createChatModel,
   type ChatSurfaceModel,
+  type SessionInfo,
 } from "@/features/chat/chat-model";
 import { useOpenClawGateway } from "@/hooks/use-openclaw-gateway";
 import { GatewayRequestError } from "@/lib/openclaw";
 
 export type StatusKind = "idle" | "ok" | "err";
 
-export type ControlContextValue = {
+/** Gateway form, connection state, RPC — does not include log or chat UI state (avoids list re-renders on every log line). */
+export type ControlConnectionValue = {
   hydrated: boolean;
-  chatModelRef: RefObject<ChatSurfaceModel | null>;
-  chatTick: number;
   gatewayUrl: string;
   setGatewayUrl: (v: string) => void;
   token: string;
@@ -44,10 +55,6 @@ export type ControlContextValue = {
   setRemember: (v: boolean) => void;
   sessionKey: string;
   setSessionKey: (v: string) => void;
-  chatInput: string;
-  setChatInput: (v: string) => void;
-  logText: string;
-  setLogText: Dispatch<SetStateAction<string>>;
   connected: boolean;
   connecting: boolean;
   statusText: string;
@@ -55,21 +62,53 @@ export type ControlContextValue = {
   handleConnect: () => void;
   handleDisconnect: () => void;
   handleStatus: () => Promise<void>;
+  clearLog: () => void;
+  rpc: (method: string, params?: unknown) => Promise<unknown>;
+};
+
+export type ControlLogValue = {
+  logText: string;
+  setLogText: Dispatch<SetStateAction<string>>;
+};
+
+export type ControlChatValue = {
+  chatModelRef: RefObject<ChatSurfaceModel | null>;
+  chatTick: number;
+  chatInput: string;
+  setChatInput: (v: string) => void;
+  sessionList: SessionInfo[];
   handleChatSessions: () => Promise<void>;
   handleChatHistory: () => Promise<void>;
   handleSendChat: () => Promise<void>;
   handleStopChat: () => Promise<void>;
-  clearLog: () => void;
-  /** Typed gateway RPC when connected (same wire as stock Control UI). */
-  rpc: (method: string, params?: unknown) => Promise<unknown>;
 };
 
-const ControlContext = createContext<ControlContextValue | null>(null);
+export type ControlContextValue = ControlConnectionValue & ControlLogValue & ControlChatValue;
 
-export function useControl(): ControlContextValue {
-  const v = useContext(ControlContext);
+const ControlConnectionContext = createContext<ControlConnectionValue | null>(null);
+const ControlLogContext = createContext<ControlLogValue | null>(null);
+const ControlChatContext = createContext<ControlChatValue | null>(null);
+
+export function useControlConnection(): ControlConnectionValue {
+  const v = useContext(ControlConnectionContext);
   if (!v) {
-    throw new Error("useControl must be used within ControlProvider");
+    throw new Error("useControlConnection must be used within ControlProvider");
+  }
+  return v;
+}
+
+export function useControlLog(): ControlLogValue {
+  const v = useContext(ControlLogContext);
+  if (!v) {
+    throw new Error("useControlLog must be used within ControlProvider");
+  }
+  return v;
+}
+
+export function useControlChat(): ControlChatValue {
+  const v = useContext(ControlChatContext);
+  if (!v) {
+    throw new Error("useControlChat must be used within ControlProvider");
   }
   return v;
 }
@@ -85,6 +124,7 @@ export function ControlProvider({ children }: { children: ReactNode }) {
   const [remember, setRemember] = useState(false);
   const [sessionKey, setSessionKey] = useState("");
   const [chatInput, setChatInput] = useState("");
+  const [sessionList, setSessionList] = useState<SessionInfo[]>([]);
   const [logText, setLogText] = useState("");
 
   const [statusText, setStatusText] = useState("Disconnected.");
@@ -117,10 +157,48 @@ export function ControlProvider({ children }: { children: ReactNode }) {
         })();
       },
       onGatewayEvent: (evt) => {
-        if (evt.event === "chat" && chatModelRef.current) {
-          if (applyChatGatewayEvent(chatModelRef.current, evt.payload)) {
+        const m = chatModelRef.current;
+        if (!m) return;
+        if (evt.event === "chat") {
+          if (getChatDebugLevel() === "verbose") {
+            logVerbosePayload(`ws chat seq=${evt.seq ?? "?"}`, evt.payload);
+          }
+          chatDebug("ws ← chat", {
+            seq: evt.seq ?? null,
+            ...summarizeChatWsPayload(evt.payload),
+          });
+          const applied = applyChatGatewayEvent(m, evt.payload);
+          if (applied === "reload") {
+            chatDebug("ws chat → history reload", chatModelSnapshot(m));
+            const c = clientRef.current;
+            if (c?.connected) {
+              void chatLoadHistory(c, m).then(() => refreshChat());
+            } else {
+              refreshChat();
+            }
+          } else if (applied) {
+            chatDebug("ws chat → UI refresh", chatModelSnapshot(m));
             refreshChat();
           }
+        } else if (evt.event === "agent") {
+          if (getChatDebugLevel() === "verbose") {
+            logVerbosePayload(`ws agent seq=${evt.seq ?? "?"}`, evt.payload);
+          }
+          chatDebug("ws ← agent", {
+            seq: evt.seq ?? null,
+            ...summarizeAgentWsPayload(evt.payload),
+          });
+          const applied = applyAgentGatewayEvent(m, evt.payload);
+          if (applied) {
+            chatDebug("ws agent → UI refresh", chatModelSnapshot(m));
+            refreshChat();
+          }
+        } else if (
+          evt.event === "session.message" ||
+          evt.event === "sessions.message" ||
+          evt.event === "session.transcript"
+        ) {
+          if (applySessionMessageEvent(m, evt.payload)) refreshChat();
         }
       },
       onClose: ({ code, reason }) => {
@@ -147,6 +225,8 @@ export function ControlProvider({ children }: { children: ReactNode }) {
         if (chatModelRef.current) {
           chatModelRef.current.sending = false;
           chatModelRef.current.activeRunId = null;
+          chatModelRef.current.activity = null;
+          chatModelRef.current.streamingThinking = null;
         }
         refreshChat();
       },
@@ -169,7 +249,6 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, []);
 
-  /** Keep last gateway URL on disk so refresh can restore it (even before a successful connect). */
   useEffect(() => {
     if (!hydrated) {
       return;
@@ -201,6 +280,34 @@ export function ControlProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(STORAGE_SESSION_KEY);
     }
   }, [hydrated, sessionKey]);
+
+  const subscribedMsgSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    const c = clientRef.current;
+    const sk = sessionKey.trim();
+    const isConnected = connectionState === "connected";
+    if (!isConnected || !sk || !c?.connected) {
+      if (subscribedMsgSessionRef.current && c?.connected) {
+        void c.request("sessions.messages.unsubscribe", { sessionKey: subscribedMsgSessionRef.current }).catch(() => {});
+      }
+      subscribedMsgSessionRef.current = null;
+      return;
+    }
+    if (subscribedMsgSessionRef.current === sk) return;
+
+    if (subscribedMsgSessionRef.current) {
+      void c.request("sessions.messages.unsubscribe", { sessionKey: subscribedMsgSessionRef.current }).catch(() => {});
+    }
+    void c.request("sessions.messages.subscribe", { sessionKey: sk }).catch(() => {});
+    subscribedMsgSessionRef.current = sk;
+
+    return () => {
+      if (subscribedMsgSessionRef.current && c?.connected) {
+        void c.request("sessions.messages.unsubscribe", { sessionKey: subscribedMsgSessionRef.current }).catch(() => {});
+        subscribedMsgSessionRef.current = null;
+      }
+    };
+  }, [connectionState, sessionKey]);
 
   const persistConnection = useCallback(() => {
     const u = gatewayUrl.trim();
@@ -235,7 +342,6 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     });
   }, [connectGateway, gatewayUrl, password, persistConnection, token]);
 
-  /** One shot after hydrate: reconnect if URL was persisted; if empty, still consume so typing later does not auto-connect. */
   const autoConnectAttemptedRef = useRef(false);
   useEffect(() => {
     if (!hydrated || autoConnectAttemptedRef.current) {
@@ -287,7 +393,9 @@ export function ControlProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      const keys = await chatLoadSessions(c);
+      const infos = await chatLoadSessions(c);
+      setSessionList(infos);
+      const keys = infos.map((s) => s.key);
       appendLog(`sessions (${keys.length}): ${keys.join("\n") || "(none)"}`);
       if (keys.length > 0 && !sessionKey.trim()) {
         setSessionKey(keys[0]);
@@ -334,7 +442,6 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     setLogText("");
   }, []);
 
-  /** No generic on the arrow — in `.tsx`, `async <T>(` is parsed as JSX and breaks at runtime. */
   const rpc = useCallback(async (method: string, params?: unknown) => {
     const c = clientRef.current;
     if (!c?.connected) {
@@ -346,38 +453,78 @@ export function ControlProvider({ children }: { children: ReactNode }) {
   const connected = connectionState === "connected";
   const connecting = connectionState === "connecting";
 
-  const value: ControlContextValue = {
-    hydrated,
-    chatModelRef,
-    chatTick,
-    gatewayUrl,
-    setGatewayUrl,
-    token,
-    setToken,
-    password,
-    setPassword,
-    remember,
-    setRemember,
-    sessionKey,
-    setSessionKey,
-    chatInput,
-    setChatInput,
-    logText,
-    setLogText,
-    connected,
-    connecting,
-    statusText,
-    statusKind,
-    handleConnect,
-    handleDisconnect,
-    handleStatus,
-    handleChatSessions,
-    handleChatHistory,
-    handleSendChat,
-    handleStopChat,
-    clearLog,
-    rpc,
-  };
+  const connectionValue = useMemo<ControlConnectionValue>(
+    () => ({
+      hydrated,
+      gatewayUrl,
+      setGatewayUrl,
+      token,
+      setToken,
+      password,
+      setPassword,
+      remember,
+      setRemember,
+      sessionKey,
+      setSessionKey,
+      connected,
+      connecting,
+      statusText,
+      statusKind,
+      handleConnect,
+      handleDisconnect,
+      handleStatus,
+      clearLog,
+      rpc,
+    }),
+    [
+      hydrated,
+      gatewayUrl,
+      token,
+      password,
+      remember,
+      sessionKey,
+      connected,
+      connecting,
+      statusText,
+      statusKind,
+      handleConnect,
+      handleDisconnect,
+      handleStatus,
+      clearLog,
+      rpc,
+    ],
+  );
 
-  return <ControlContext.Provider value={value}>{children}</ControlContext.Provider>;
+  const logValue = useMemo<ControlLogValue>(() => ({ logText, setLogText }), [logText]);
+
+  const chatValue = useMemo<ControlChatValue>(
+    () => ({
+      chatModelRef,
+      chatTick,
+      chatInput,
+      setChatInput,
+      sessionList,
+      handleChatSessions,
+      handleChatHistory,
+      handleSendChat,
+      handleStopChat,
+    }),
+    [
+      chatTick,
+      chatInput,
+      sessionList,
+      handleChatSessions,
+      handleChatHistory,
+      handleSendChat,
+      handleStopChat,
+    ],
+  );
+
+  return (
+    <ControlConnectionContext.Provider value={connectionValue}>
+      <ControlLogContext.Provider value={logValue}>
+        <ControlChatContext.Provider value={chatValue}>{children}</ControlChatContext.Provider>
+      </ControlLogContext.Provider>
+    </ControlConnectionContext.Provider>
+  );
 }

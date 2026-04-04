@@ -32,7 +32,7 @@ export function ThemeToggle({
     <label
       className={cn(
         "flex items-center gap-1.5 text-xs",
-        isSidebar ? "text-sidebar-foreground/80" : "text-muted",
+        isSidebar ? "text-sidebar-foreground/80" : "text-muted-foreground",
       )}
     >
       <span className="whitespace-nowrap">Theme</span>

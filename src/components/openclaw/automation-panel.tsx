@@ -2,13 +2,13 @@
 
 import { useCallback, useState } from "react";
 import { btnClass } from "@/components/control-button-classes";
-import { useControl } from "@/components/control-provider";
+import { useControlConnection } from "@/components/control-provider";
 import { JsonPreview } from "@/components/openclaw/json-preview";
 import { OpenClawDisconnectedHint } from "@/components/openclaw/disconnected-hint";
 import { GatewayRequestError } from "@/lib/openclaw";
 
 export function AutomationPanel() {
-  const { connected, rpc } = useControl();
+  const { connected, rpc } = useControlConnection();
   const [status, setStatus] = useState<unknown>(null);
   const [jobs, setJobs] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
@@ -50,7 +50,7 @@ export function AutomationPanel() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted">
+      <p className="text-sm text-muted-foreground">
         Read-only view of gateway cron scheduler state (
         <code className="text-xs text-foreground">cron.status</code>,{" "}
         <code className="text-xs text-foreground">cron.list</code>). Editing jobs stays in the stock Control

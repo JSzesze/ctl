@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "streamdown/styles.css";
+
+@source "../../node_modules/streamdown/dist/*.js";
+@source "../../node_modules/@streamdown/code/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -132,15 +136,16 @@
   --text-primary: #e4e4e4;
   --text-body: #e4e4e4;
   --text-brand: #f5f5f5;
-  --text-muted: #8c8c8c;
+  /* Secondary text: keep ≥ ~4.5:1 on #000 (shadcn `text-muted` maps to `muted` surface — use `text-muted-foreground` in UI). */
+  --text-muted: #b0b0b0;
   --text-nav: #a3a3a3;
   --text-nav-hover: #e4e4e4;
   --text-nav-active: #fafafa;
-  --text-status-off: #525252;
+  --text-status-off: #8a8a8a;
   --text-status-on: #a3a3a3;
-  --text-hint: #8c8c8c;
-  --text-legend: #737373;
-  --text-label: #b5b5b5;
+  --text-hint: #b0b0b0;
+  --text-legend: #a3a3a3;
+  --text-label: #c4c4c4;
   --text-link: #d4d4d4;
   --text-link-hover: #fafafa;
   --text-log-heading: #737373;
@@ -164,7 +169,7 @@
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
+  --muted-foreground: oklch(0.78 0 0);
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
@@ -192,7 +197,7 @@
   --color-background: var(--bg-body);
   --color-foreground: var(--text-body);
 
-  --color-muted: var(--text-muted);
+  /* `text-muted` Tailwind token = shadcn `muted` (surface). Do not use `text-muted` for body copy — use `text-muted-foreground`. */
   --color-border: var(--border-default);
   --color-border-muted: var(--border-muted);
   --color-border-input: var(--border-input);

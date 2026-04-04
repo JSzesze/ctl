@@ -13,7 +13,7 @@ export function CtlEmptyPanel({ title, body, footnote }: CtlEmptyPanelProps) {
       aria-label={title}
     >
       <h2 className="text-sm font-medium text-heading">{title}</h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-muted">{body}</p>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{body}</p>
       {footnote ? <div className="mt-4 text-xs text-hint">{footnote}</div> : null}
     </section>
   );

@@ -101,14 +101,14 @@ export function TranscribeIntegrationPanel() {
   }, [apiKey, baseUrl, enabled, listPath]);
 
   if (!hydrated) {
-    return <p className="text-sm text-muted">Loading…</p>;
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
 
   return (
     <div className="space-y-8">
       <section className="space-y-4">
         <h2 className="text-sm font-medium text-heading">Settings</h2>
-        <p className="max-w-2xl text-sm text-muted">
+        <p className="max-w-2xl text-sm text-muted-foreground">
           CTL calls your Transcribe HTTP API through a same-origin proxy (
           <code className="text-xs text-foreground">POST /api/transcribe/documents</code>
           ) so the browser is not blocked by CORS. Match{" "}
@@ -193,14 +193,14 @@ export function TranscribeIntegrationPanel() {
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-medium text-heading">Documents</h2>
           {lastUrl ? (
-            <p className="max-w-full truncate text-xs text-muted" title={lastUrl}>
+            <p className="max-w-full truncate text-xs text-muted-foreground" title={lastUrl}>
               Last request: <span className="font-mono text-[0.7rem] text-foreground/80">{lastUrl}</span>
             </p>
           ) : null}
         </div>
 
         {rows.length === 0 && !loading ? (
-          <p className="rounded-lg border border-dashed border-border-muted bg-surface-status/40 px-4 py-6 text-center text-sm text-muted">
+          <p className="rounded-lg border border-dashed border-border-muted bg-surface-status/40 px-4 py-6 text-center text-sm text-muted-foreground">
             {lastUrl
               ? "The response had no document rows we could parse. Check listPath and that the JSON uses an array or a documents/items/data envelope (see normalizeTranscribeDocumentList)."
               : "No rows yet. Save settings, enable the integration, then refresh."}

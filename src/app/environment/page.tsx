@@ -10,7 +10,7 @@ export default function EnvironmentPage() {
   return (
     <CtlViewShell
       title="Environment"
-      lede="Effective gateway configuration (merged settings and schema metadata). OS-level env vars are not shown—only what the gateway exposes over the wire."
+      lede="config.schema reference from the gateway. The live merged config and editing live on Config. OS env vars are not listed here."
     >
       <EnvironmentPanel />
     </CtlViewShell>
