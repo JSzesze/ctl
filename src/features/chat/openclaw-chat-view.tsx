@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useControlChat, useControlConnection } from "@/components/control-provider";
 import { ChatComposer } from "@/features/chat/chat-composer";
 import { ChatScrollButton } from "@/features/chat/chat-scroll-button";
@@ -15,6 +15,7 @@ export function OpenClawChatView() {
   const {
     chatModelRef,
     chatTick,
+    refreshChat,
     chatInput,
     setChatInput,
     sessionList,
@@ -67,12 +68,25 @@ export function OpenClawChatView() {
     setShowScrollBtn(false);
   }, [scrollToBottom]);
 
-  const autoLoadedRef = useRef<string | null>(null);
+  /** Sync model + clear stale messages immediately when the session key changes (before history fetch). */
+  useLayoutEffect(() => {
+    if (!hydrated) return;
+    const m = chatModelRef.current;
+    if (!m) return;
+    const sk = sessionKey.trim();
+    m.sessionKey = sk;
+    m.entries = [];
+    m.streaming = "";
+    m.streamingThinking = null;
+    m.activeRunId = null;
+    m.activity = null;
+    m.sending = false;
+    m.lastError = null;
+    refreshChat();
+  }, [hydrated, sessionKey, refreshChat]);
+
   useEffect(() => {
     if (!connected || !sessionKey.trim()) return;
-    const loadKey = `${sessionKey}`;
-    if (autoLoadedRef.current === loadKey) return;
-    autoLoadedRef.current = loadKey;
     void wrappedLoadHistory();
   }, [connected, sessionKey, wrappedLoadHistory]);
 

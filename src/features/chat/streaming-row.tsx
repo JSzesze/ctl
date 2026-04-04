@@ -88,7 +88,7 @@ export function StreamingRow({
       ) : null}
 
       {showThinking ? (
-        <div className="mb-2 rounded-lg border border-border/50 border-l-2 border-l-amber-500/45 bg-muted/25">
+        <div className="mb-2 rounded-lg border border-border/50 bg-muted/25">
           <button
             type="button"
             onClick={() => setThinkingOpen((o) => !o)}
@@ -110,8 +110,17 @@ export function StreamingRow({
             ) : null}
           </button>
           {thinkingOpen ? (
-            <div className="border-t border-border/40 px-2.5 py-2 text-xs leading-relaxed text-muted-foreground">
-              <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap font-sans">{thinkingText}</pre>
+            <div className="border-t border-border/40 px-2.5 py-2 text-xs leading-relaxed">
+              <div className="max-h-64 overflow-y-auto">
+                <Streamdown
+                  mode="static"
+                  className="max-w-none text-xs leading-relaxed text-muted-foreground [&_p]:my-1 [&_h1]:my-2 [&_h2]:my-2 [&_ul]:my-1 [&_ol]:my-1"
+                  plugins={streamdownPlugins}
+                  components={streamdownComponents}
+                >
+                  {thinkingText ?? ""}
+                </Streamdown>
+              </div>
             </div>
           ) : null}
         </div>

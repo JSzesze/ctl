@@ -74,6 +74,8 @@ export type ControlLogValue = {
 export type ControlChatValue = {
   chatModelRef: RefObject<ChatSurfaceModel | null>;
   chatTick: number;
+  /** Re-read chat model from ref into React (after mutating the model). */
+  refreshChat: () => void;
   chatInput: string;
   setChatInput: (v: string) => void;
   sessionList: SessionInfo[];
@@ -501,6 +503,7 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     () => ({
       chatModelRef,
       chatTick,
+      refreshChat,
       chatInput,
       setChatInput,
       sessionList,
@@ -511,6 +514,7 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     }),
     [
       chatTick,
+      refreshChat,
       chatInput,
       sessionList,
       handleChatSessions,

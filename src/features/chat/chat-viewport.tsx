@@ -1,8 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { ChatEntry } from "@/features/chat/chat-model";
-import { MessageRow } from "@/features/chat/message-row";
+import { MessageRow, ToolClusterRow } from "@/features/chat/message-row";
+
+type ViewChunk =
+  | { kind: "single"; entry: ChatEntry }
+  | { kind: "tool-cluster"; entries: ChatEntry[] };
+
+function chunkEntriesForView(entries: readonly ChatEntry[]): ViewChunk[] {
+  const out: ViewChunk[] = [];
+  let i = 0;
+  while (i < entries.length) {
+    const e = entries[i];
+    if (e.kind === "tool") {
+      const group: ChatEntry[] = [e];
+      let j = i + 1;
+      while (j < entries.length && entries[j].kind === "tool") {
+        group.push(entries[j]);
+        j++;
+      }
+      if (group.length >= 2) {
+        out.push({ kind: "tool-cluster", entries: group });
+      } else {
+        out.push({ kind: "single", entry: group[0] });
+      }
+      i = j;
+    } else {
+      out.push({ kind: "single", entry: e });
+      i++;
+    }
+  }
+  return out;
+}
 
 export type ChatViewportProps = {
   entries: readonly ChatEntry[];
@@ -73,6 +103,8 @@ export function ChatViewport({
     return () => observer.disconnect();
   }, [hasMore, runLoadMore, leadingEntryId, scrollRef]);
 
+  const chunks = useMemo(() => chunkEntriesForView(entries), [entries]);
+
   return (
     <div
       ref={scrollRef}
@@ -83,9 +115,13 @@ export function ChatViewport({
         {hasMore ? (
           <div ref={sentinelRef} className="h-1 w-full shrink-0" aria-hidden="true" />
         ) : null}
-        {entries.map((entry) => (
-          <MessageRow key={entry.id} entry={entry} />
-        ))}
+        {chunks.map((chunk) =>
+          chunk.kind === "tool-cluster" ? (
+            <ToolClusterRow key={`cluster:${chunk.entries[0]?.id ?? "t"}`} entries={chunk.entries} />
+          ) : (
+            <MessageRow key={chunk.entry.id} entry={chunk.entry} />
+          ),
+        )}
         {children}
       </div>
     </div>

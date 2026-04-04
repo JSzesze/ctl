@@ -1,7 +1,15 @@
 "use client";
 
 import { memo, useState } from "react";
-import { CheckCircle2, ChevronRight, Lightbulb, Loader2, Wrench, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Lightbulb,
+  Loader2,
+  Wrench,
+  XCircle,
+} from "lucide-react";
 import { Streamdown } from "streamdown";
 import type { ChatEntry } from "@/features/chat/chat-model";
 import { streamdownComponents, streamdownPlugins } from "@/features/chat/streamdown-config";
@@ -102,13 +110,106 @@ function ToolRow({ entry }: { entry: ChatEntry }) {
   );
 }
 
+export type ToolClusterRowProps = {
+  entries: readonly ChatEntry[];
+};
+
+/** Overlapping circular “avatars” for consecutive tool calls; expand for full cards. */
+export function ToolClusterRow({ entries }: ToolClusterRowProps) {
+  const [expanded, setExpanded] = useState(false);
+  if (entries.length === 0) return null;
+
+  const n = entries.length;
+  const anyRunning = entries.some((e) => (e.toolStatus ?? "done") === "running");
+
+  return (
+    <div
+      className="flex w-full min-w-0 flex-col items-stretch"
+      role="group"
+      aria-label={`${n} tool ${n === 1 ? "call" : "calls"}`}
+    >
+      <div className="flex max-w-[min(100%,42rem)] flex-row flex-wrap items-center gap-2">
+        <div className="flex flex-row items-center pl-0.5">
+          {entries.map((entry, i) => {
+            const status = entry.toolStatus ?? "done";
+            const initial = entry.toolName
+              ? (Array.from(entry.toolName.trim())[0] ?? "?").toUpperCase()
+              : "?";
+            return (
+              <div
+                key={entry.id}
+                className={`relative flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-background bg-gradient-to-br from-muted to-muted/70 text-xs font-semibold text-foreground/90 shadow-md ring-1 ring-border/50 ${
+                  status === "running"
+                    ? "ring-2 ring-violet-500/45"
+                    : status === "error"
+                      ? "ring-2 ring-destructive/40"
+                      : ""
+                } ${i > 0 ? "-ml-3" : ""}`}
+                style={{ zIndex: i + 1 }}
+                title={entry.toolName ?? "tool"}
+              >
+                {status === "running" ? (
+                  <Loader2 className="size-4 animate-spin text-violet-600 dark:text-violet-400" aria-hidden />
+                ) : status === "error" ? (
+                  <XCircle className="size-4 text-destructive" aria-hidden />
+                ) : (
+                  <span className="select-none" aria-hidden>
+                    {initial}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/30 px-2.5 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+          aria-expanded={expanded}
+        >
+          <Wrench className="size-3 shrink-0 opacity-70" aria-hidden />
+          <span className="font-medium text-foreground/85">
+            {n} tool{n === 1 ? "" : "s"}
+            {anyRunning ? " · running" : ""}
+          </span>
+          {expanded ? (
+            <ChevronDown className="size-3.5 shrink-0 opacity-70" aria-hidden />
+          ) : (
+            <ChevronRight className="size-3.5 shrink-0 opacity-70" aria-hidden />
+          )}
+        </button>
+      </div>
+      {expanded ? (
+        <div className="mt-2 flex min-w-0 flex-col gap-2 border-l-2 border-border/40 pl-3">
+          {entries.map((entry) => (
+            <ToolRow key={entry.id} entry={entry} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ThinkingBody({ text, className }: { text: string; className?: string }) {
+  return (
+    <div className={className}>
+      <Streamdown
+        mode="static"
+        className="max-w-none text-xs leading-relaxed text-muted-foreground [&_p]:my-1 [&_h1]:my-2 [&_h2]:my-2 [&_ul]:my-1 [&_ol]:my-1"
+        plugins={streamdownPlugins}
+        components={streamdownComponents}
+      >
+        {text}
+      </Streamdown>
+    </div>
+  );
+}
+
 function ThinkingRow({ entry }: { entry: ChatEntry }) {
   const [open, setOpen] = useState(false);
-  const collapsedHint =
-    entry.text.length > 120 ? `${entry.text.slice(0, 120).trim()}…` : entry.text;
   return (
     <div className="flex w-full min-w-0 flex-col items-stretch">
-      <div className="max-w-[min(100%,42rem)] rounded-lg border border-border/50 border-l-2 border-l-amber-500/50 bg-muted/20 shadow-sm">
+      <div className="max-w-[min(100%,42rem)] rounded-lg border border-border/50 bg-muted/20 shadow-sm">
         <button
           type="button"
           onClick={() => setOpen(!open)}
@@ -125,12 +226,20 @@ function ThinkingRow({ entry }: { entry: ChatEntry }) {
           />
         </button>
         {open ? (
-          <div className="border-t border-border/40 px-2.5 py-2 text-xs leading-relaxed text-muted-foreground">
-            <pre className="whitespace-pre-wrap font-sans">{entry.text}</pre>
+          <div className="border-t border-border/40 px-2.5 py-2 text-xs leading-relaxed">
+            <div className="max-h-64 overflow-y-auto">
+              <ThinkingBody text={entry.text} />
+            </div>
           </div>
         ) : (
-          <div className="border-t border-border/40 px-2.5 py-1.5 text-[11px] italic text-muted-foreground/90">
-            {collapsedHint}
+          <div className="relative border-t border-border/40 px-2.5 py-1.5">
+            <div className="max-h-[4.25rem] overflow-hidden">
+              <ThinkingBody text={entry.text} />
+            </div>
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-muted/20 to-transparent"
+              aria-hidden
+            />
           </div>
         )}
       </div>
