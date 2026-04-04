@@ -1,3 +1,4 @@
+import { normalizeGatewayWebSocketUrl } from "@/lib/openclaw/gateway-url";
 import { buildDeviceAuthPayload } from "@/lib/openclaw/device-auth-payload";
 import { loadDeviceAuthToken, storeDeviceAuthToken } from "@/lib/openclaw/device-token-store";
 import {
@@ -141,8 +142,25 @@ export class OpenClawMinimalClient {
     if (this.closed) {
       return;
     }
-    this.log(`WebSocket opening ${this.opts.url}`);
-    this.ws = new WebSocket(this.opts.url);
+    const normalized = normalizeGatewayWebSocketUrl(this.opts.url);
+    if (!normalized.ok) {
+      this.log(`Invalid WebSocket URL: ${normalized.error}`);
+      queueMicrotask(() => this.opts.onClose?.({ code: CONNECT_FAILED_CLOSE_CODE, reason: normalized.error }));
+      return;
+    }
+    const wsUrl = normalized.url;
+    this.log(`WebSocket opening ${wsUrl}`);
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(wsUrl);
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "The string did not match the expected pattern.";
+      this.log(`WebSocket constructor failed: ${msg}`);
+      queueMicrotask(() => this.opts.onClose?.({ code: CONNECT_FAILED_CLOSE_CODE, reason: msg }));
+      return;
+    }
+    this.ws = socket;
     this.ws.addEventListener("open", () => this.queueConnect());
     this.ws.addEventListener("message", (ev) => this.handleMessage(String(ev.data ?? "")));
     this.ws.addEventListener("close", (ev) => {

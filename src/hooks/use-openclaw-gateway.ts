@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GatewayEventNotification, GatewayHelloOk } from "@/lib/openclaw";
 import { OpenClawMinimalClient } from "@/lib/openclaw";
+import { normalizeGatewayWebSocketUrl } from "@/lib/openclaw/gateway-url";
 
 export type GatewayConnectionState = "disconnected" | "connecting" | "connected";
 
@@ -34,8 +35,9 @@ export function useOpenClawGateway(callbacks: OpenClawGatewayCallbacks) {
   }, []);
 
   const connect = useCallback((url: string, auth: { token?: string; password?: string }) => {
-    const trimmed = url.trim();
-    if (!trimmed) {
+    const normalized = normalizeGatewayWebSocketUrl(url);
+    if (!normalized.ok) {
+      cbRef.current.onLog(`[gateway] ${normalized.error}`);
       return;
     }
 
@@ -48,7 +50,7 @@ export function useOpenClawGateway(callbacks: OpenClawGatewayCallbacks) {
     setConnectionState("connecting");
 
     const client = new OpenClawMinimalClient({
-      url: trimmed,
+      url: normalized.url,
       token: auth.token,
       password: auth.password,
       onLog: (line) => cbRef.current.onLog(line),

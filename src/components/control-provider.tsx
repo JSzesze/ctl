@@ -38,6 +38,7 @@ import {
   type SessionInfo,
 } from "@/features/chat/chat-model";
 import { useOpenClawGateway } from "@/hooks/use-openclaw-gateway";
+import { normalizeGatewayWebSocketUrl } from "@/lib/openclaw/gateway-url";
 import { GatewayRequestError } from "@/lib/openclaw";
 
 export type StatusKind = "idle" | "ok" | "err";
@@ -329,16 +330,16 @@ export function ControlProvider({ children }: { children: ReactNode }) {
   }, [gatewayUrl, remember, token]);
 
   const handleConnect = useCallback(() => {
-    const url = gatewayUrl.trim();
-    if (!url) {
-      setStatusText("Enter a WebSocket URL (ws:// or wss://).");
+    const normalized = normalizeGatewayWebSocketUrl(gatewayUrl);
+    if (!normalized.ok) {
+      setStatusText(normalized.error);
       setStatusKind("err");
       return;
     }
     persistConnection();
     setStatusText("Connecting…");
     setStatusKind("idle");
-    connectGateway(url, {
+    connectGateway(normalized.url, {
       token: token.trim() || undefined,
       password: password.trim() || undefined,
     });
@@ -350,14 +351,16 @@ export function ControlProvider({ children }: { children: ReactNode }) {
       return;
     }
     autoConnectAttemptedRef.current = true;
-    const url = gatewayUrl.trim();
-    if (!url) {
+    const normalized = normalizeGatewayWebSocketUrl(gatewayUrl);
+    if (!normalized.ok) {
+      setStatusText(normalized.error);
+      setStatusKind("err");
       return;
     }
     persistConnection();
     setStatusText("Connecting…");
     setStatusKind("idle");
-    connectGateway(url, {
+    connectGateway(normalized.url, {
       token: token.trim() || undefined,
       password: password.trim() || undefined,
     });
