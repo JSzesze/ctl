@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import type { ChatEntry } from "@/features/chat/chat-model";
 import { MessageRow, ToolClusterRow } from "@/features/chat/message-row";
 
@@ -34,12 +34,41 @@ function chunkEntriesForView(entries: readonly ChatEntry[]): ViewChunk[] {
   return out;
 }
 
+/** Memoized so streaming deltas do not re-run Streamdown for every history row. */
+const ChatMessageBlocks = memo(function ChatMessageBlocks({
+  entries,
+}: {
+  entries: readonly ChatEntry[];
+}) {
+  const chunks = useMemo(() => chunkEntriesForView(entries), [entries]);
+  return (
+    <>
+      {chunks.map((chunk) => {
+        const key =
+          chunk.kind === "tool-cluster"
+            ? `cluster:${chunk.entries[0]?.id ?? "t"}`
+            : chunk.entry.id;
+        return (
+          <div key={key} className="cv-msg">
+            {chunk.kind === "tool-cluster" ? (
+              <ToolClusterRow entries={chunk.entries} />
+            ) : (
+              <MessageRow entry={chunk.entry} />
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+});
+
 export type ChatViewportProps = {
   entries: readonly ChatEntry[];
   hasMore: boolean;
   onLoadMore: () => void;
   leadingEntryId: string;
   scrollRef: React.RefObject<HTMLDivElement | null>;
+  contentRef: React.RefObject<HTMLDivElement | null>;
   onScroll: () => void;
   children?: React.ReactNode;
 };
@@ -50,6 +79,7 @@ export function ChatViewport({
   onLoadMore,
   leadingEntryId,
   scrollRef,
+  contentRef,
   onScroll,
   children,
 }: ChatViewportProps) {
@@ -65,6 +95,14 @@ export function ChatViewport({
   useEffect(() => {
     hasMoreRef.current = hasMore;
   }, [hasMore]);
+
+  // Passive scroll listener — cannot block the compositor thread.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [scrollRef, onScroll]);
 
   const runLoadMore = useCallback(() => {
     const container = scrollRef.current;
@@ -103,25 +141,16 @@ export function ChatViewport({
     return () => observer.disconnect();
   }, [hasMore, runLoadMore, leadingEntryId, scrollRef]);
 
-  const chunks = useMemo(() => chunkEntriesForView(entries), [entries]);
-
   return (
     <div
       ref={scrollRef}
-      onScroll={onScroll}
       className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain"
     >
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 py-4">
+      <div ref={contentRef} className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 py-4">
         {hasMore ? (
           <div ref={sentinelRef} className="h-1 w-full shrink-0" aria-hidden="true" />
         ) : null}
-        {chunks.map((chunk) =>
-          chunk.kind === "tool-cluster" ? (
-            <ToolClusterRow key={`cluster:${chunk.entries[0]?.id ?? "t"}`} entries={chunk.entries} />
-          ) : (
-            <MessageRow key={chunk.entry.id} entry={chunk.entry} />
-          ),
-        )}
+        <ChatMessageBlocks entries={entries} />
         {children}
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 const NEAR_BOTTOM_PX = 80;
 
@@ -7,11 +7,16 @@ const NEAR_BOTTOM_PX = 80;
  * on content changes only when pinned. Stops auto-scrolling when the user
  * scrolls up to read history.
  *
- * Uses useLayoutEffect so the scroll snap happens before the browser paints,
- * preventing a visible jump when entries are replaced (e.g. history reload).
+ * Streaming auto-scroll uses a ResizeObserver on the content element so
+ * we only touch scrollTop when the content actually grows — no per-tick
+ * forced layouts during React's commit phase.
+ *
+ * Structural changes (session switch, history load) still use
+ * useLayoutEffect for flicker-free snaps before paint.
  */
-export function useChatScrollPin(deps: unknown[]) {
+export function useChatScrollPin(structuralDeps: unknown[]) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
 
   const onScroll = useCallback(() => {
@@ -21,27 +26,31 @@ export function useChatScrollPin(deps: unknown[]) {
     pinnedRef.current = distFromBottom <= NEAR_BOTTOM_PX;
   }, []);
 
+  // Snap to bottom before paint on structural changes (session switch, history load).
   useLayoutEffect(() => {
     if (!pinnedRef.current) return;
-    let cancelled = false;
-    const apply = () => {
-      if (cancelled) return;
-      const el = scrollRef.current;
-      if (!el || !pinnedRef.current) return;
-      el.scrollTop = el.scrollHeight;
-    };
-    apply();
-    // Second pass after paint: markdown/streaming layout can grow `scrollHeight` after the first scroll.
-    const r1 = requestAnimationFrame(() => {
-      apply();
-      requestAnimationFrame(apply);
-    });
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(r1);
-    };
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, structuralDeps);
+
+  // Auto-scroll during streaming: ResizeObserver fires only when the
+  // content element's box size actually changes, avoiding the per-tick
+  // useLayoutEffect that forced 2-3 synchronous reflows per frame.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+
+    const ro = new ResizeObserver(() => {
+      if (!pinnedRef.current) return;
+      const scroller = scrollRef.current;
+      if (scroller) {
+        scroller.scrollTop = scroller.scrollHeight;
+      }
+    });
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -50,5 +59,5 @@ export function useChatScrollPin(deps: unknown[]) {
     pinnedRef.current = true;
   }, []);
 
-  return { scrollRef, onScroll, scrollToBottom, pinnedRef };
+  return { scrollRef, contentRef, onScroll, scrollToBottom, pinnedRef };
 }

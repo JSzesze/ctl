@@ -289,6 +289,12 @@
     content: "… ";
     opacity: 0.6;
   }
+
+  /* Skip layout + paint for off-screen chat messages (browser-native virtualization). */
+  .cv-msg {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 60px;
+  }
 }
 
 @theme inline {
