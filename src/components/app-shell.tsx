@@ -21,7 +21,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     pathname === "/" ||
     pathname === "/config" ||
     pathname.startsWith("/config/") ||
-    pathname === "/agents";
+    pathname === "/agents" ||
+    pathname === "/usage";
   const immersive = pathname === "/chat";
   /** Full-height flex column, no outer scroll — page owns the viewport (e.g. agents file studio). */
   const studio = pathname === "/agents";

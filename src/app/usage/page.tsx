@@ -10,7 +10,7 @@ export default function UsagePage() {
   return (
     <CtlViewShell
       title="Usage"
-      lede="Session and cost aggregates from the gateway for a date range. Load when you need a snapshot; nothing polls in the background."
+      lede="Token and cost totals from the gateway for the dates you select. Changing the range fetches fresh data automatically."
     >
       <UsagePanel />
     </CtlViewShell>
