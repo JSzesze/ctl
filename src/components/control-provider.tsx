@@ -429,7 +429,10 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     }
     const text = chatInput;
     setChatInput("");
-    await chatSend(c, m, text);
+    const sendDone = chatSend(c, m, text);
+    // Re-render as soon as the user message is queued (before network ack) so the viewport can scroll.
+    refreshChat();
+    await sendDone;
     refreshChat();
   }, [chatInput, refreshChat]);
 

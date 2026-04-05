@@ -22,10 +22,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     pathname === "/config" ||
     pathname.startsWith("/config/") ||
     pathname === "/agents" ||
+    pathname === "/skills" ||
     pathname === "/usage";
   const immersive = pathname === "/chat";
-  /** Full-height flex column, no outer scroll — page owns the viewport (e.g. agents file studio). */
-  const studio = pathname === "/agents";
+  /** Full-height flex column, no outer scroll — page owns the viewport (e.g. agents / skills editors). */
+  const studio = pathname === "/agents" || pathname === "/skills";
 
   return (
     <TooltipProvider delayDuration={0}>

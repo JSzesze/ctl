@@ -23,9 +23,23 @@ export function useChatScrollPin(deps: unknown[]) {
 
   useLayoutEffect(() => {
     if (!pinnedRef.current) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    let cancelled = false;
+    const apply = () => {
+      if (cancelled) return;
+      const el = scrollRef.current;
+      if (!el || !pinnedRef.current) return;
+      el.scrollTop = el.scrollHeight;
+    };
+    apply();
+    // Second pass after paint: markdown/streaming layout can grow `scrollHeight` after the first scroll.
+    const r1 = requestAnimationFrame(() => {
+      apply();
+      requestAnimationFrame(apply);
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(r1);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 

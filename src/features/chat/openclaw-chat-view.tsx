@@ -68,6 +68,12 @@ export function OpenClawChatView() {
     setShowScrollBtn(false);
   }, [scrollToBottom]);
 
+  /** Sending should reveal the new tail even if scroll position was slightly off “pinned” (e.g. subpixel). */
+  const handleComposerSend = useCallback(async () => {
+    scrollToBottom();
+    await handleSendChat();
+  }, [scrollToBottom, handleSendChat]);
+
   /** Sync model + clear stale messages immediately when the session key changes (before history fetch). */
   useLayoutEffect(() => {
     if (!hydrated) return;
@@ -134,7 +140,7 @@ export function OpenClawChatView() {
       <ChatComposer
         value={chatInput}
         onChange={setChatInput}
-        onSend={handleSendChat}
+        onSend={() => void handleComposerSend()}
         onStop={() => void handleStopChat()}
         disabled={!rpcEnabled}
         sending={chatSending}

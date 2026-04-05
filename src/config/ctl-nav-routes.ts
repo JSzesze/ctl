@@ -22,6 +22,12 @@ export const CTL_NAV_ROUTES: CtlNavRoute[] = [
     keywords: ["workspace", "files", "AGENTS.md", "memory"],
     group: "OpenClaw",
   },
+  {
+    href: "/skills",
+    label: "Skills",
+    keywords: ["skill", "SKILL.md", "openclaw", "workspace", "clawhub"],
+    group: "OpenClaw",
+  },
   { href: "/usage", label: "Usage", keywords: ["cost", "sessions", "metrics"], group: "OpenClaw" },
   { href: "/automation", label: "Automation", keywords: ["cron", "schedule"], group: "OpenClaw" },
   { href: "/environment", label: "Environment", keywords: ["config", "gateway"], group: "OpenClaw" },
@@ -29,7 +35,7 @@ export const CTL_NAV_ROUTES: CtlNavRoute[] = [
   {
     href: "/integrations/transcribe",
     label: "Transcribe",
-    keywords: ["audio", "documents", "integration"],
+    keywords: ["audio", "documents", "integration", "local", "debug", "gateway", "agents"],
     group: "Integrations",
   },
 ];

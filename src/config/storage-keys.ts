@@ -6,7 +6,7 @@ export const STORAGE_SESSION_KEY = "openclaw-minimal.sessionKey";
 export const STORAGE_SELECTED_AGENT_ID = "openclaw-minimal.selectedAgentId";
 export const STORAGE_THEME = "openclaw-minimal.theme";
 
-/** Transcribe HTTP integration (see project `docs/http-api.md` for upstream contract). */
+/** Browser-only Transcribe test panel — not sent to OpenClaw agents (see `docs/http-api.md` for upstream contract). */
 export const STORAGE_TRANSCRIBE_ENABLED = "ctl.transcribe.enabled";
 export const STORAGE_TRANSCRIBE_BASE_URL = "ctl.transcribe.baseUrl";
 export const STORAGE_TRANSCRIBE_LIST_PATH = "ctl.transcribe.listPath";

@@ -106,12 +106,18 @@ export function TranscribeIntegrationPanel() {
 
   return (
     <div className="space-y-8">
+      <div className="max-w-2xl rounded-lg border border-border-muted bg-surface-status/80 px-3 py-2.5 text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">Agents:</span> settings here stay in this browser and never reach
+        the OpenClaw gateway. To let agents list or ingest transcripts, configure Transcribe on the gateway (e.g. tool
+        handler, MCP, or your distro’s skill pattern) with secrets in server config — not in CTL localStorage.
+      </div>
+
       <section className="space-y-4">
-        <h2 className="text-sm font-medium text-heading">Settings</h2>
+        <h2 className="text-sm font-medium text-heading">Local test</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
           CTL calls your Transcribe HTTP API through a same-origin proxy (
           <code className="text-xs text-foreground">POST /api/transcribe/documents</code>
-          ) so the browser is not blocked by CORS. Match{" "}
+          ) so the browser avoids CORS. Match{" "}
           <code className="text-xs text-foreground">baseUrl</code> and{" "}
           <code className="text-xs text-foreground">listPath</code> to{" "}
           <code className="text-xs text-foreground">docs/http-api.md</code> in your Transcribe project.
@@ -124,7 +130,7 @@ export function TranscribeIntegrationPanel() {
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
           />
-          Enable Transcribe integration
+          Enable local Transcribe panel
         </label>
 
         <div className="space-y-1.5">

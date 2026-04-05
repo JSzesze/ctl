@@ -8,7 +8,8 @@ import { normalizeTranscribeDocumentList } from "@/lib/transcribe-documents";
 export const runtime = "nodejs";
 
 /**
- * Server proxy for the Transcribe HTTP API document list so the browser avoids CORS.
+ * Server proxy for the Transcribe HTTP API document list so the CTL browser UI avoids CORS.
+ * OpenClaw agents do not use this route; they need gateway-side tools/MCP.
  *
  * Expected upstream (adjust `listPath` in UI if your service differs):
  *   GET {baseUrl}{listPath}  e.g. GET http://127.0.0.1:8787/documents

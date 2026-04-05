@@ -101,10 +101,12 @@ export function CtlTodayDashboard() {
           <CtlMetricCard
             icon={AudioLines}
             value={transcribeOn ? "On" : "Off"}
-            label="Transcribe"
-            hint={transcribeOn ? "Enabled in settings." : "Integrations → Transcribe"}
-            change={transcribeOn ? "enabled" : "disabled"}
-            changeTone={transcribeOn ? "positive" : "muted"}
+            label="Transcribe (local)"
+            hint={
+              transcribeOn
+                ? "Browser table only — not wired to agents."
+                : "Integrations → Transcribe. Agents need a gateway tool or MCP."
+            }
           />
         </div>
       </section>

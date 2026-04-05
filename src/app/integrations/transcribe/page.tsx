@@ -10,7 +10,7 @@ export default function TranscribeIntegrationPage() {
   return (
     <CtlViewShell
       title="Transcribe"
-      lede="Connect CTL to your Transcribe HTTP service: store base URL and optional API key locally, then list documents in a simple table."
+      lede="Optional browser-only check against your Transcribe HTTP API. OpenClaw agents do not use this path — give them a gateway tool, MCP server, or documented skill that calls Transcribe with server-side config."
     >
       <TranscribeIntegrationPanel />
     </CtlViewShell>

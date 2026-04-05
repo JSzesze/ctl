@@ -5,6 +5,19 @@ import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { streamdownComponents, streamdownPlugins } from "@/features/chat/streamdown-config";
 
+/**
+ * Streamdown “typing” polish while the gateway run is active.
+ * - `isAnimating={runActive}` (required): caret + animate only during real streaming, not implicitly always-on.
+ * - `stagger: 0`: new text fades in without a long per-unit queue (avoids multi-paragraph desync).
+ */
+const streamingBodyAnimate = {
+  animation: "fadeIn" as const,
+  duration: 90,
+  stagger: 0,
+  sep: "word" as const,
+  easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+};
+
 export type StreamingRowProps = {
   text: string;
   activity: string | null;
@@ -127,7 +140,13 @@ export function StreamingRow({
       ) : null}
 
       {showBody ? (
-        <Streamdown animated isAnimating plugins={streamdownPlugins} components={streamdownComponents}>
+        <Streamdown
+          animated={streamingBodyAnimate}
+          isAnimating={runActive}
+          caret="circle"
+          plugins={streamdownPlugins}
+          components={streamdownComponents}
+        >
           {text}
         </Streamdown>
       ) : null}

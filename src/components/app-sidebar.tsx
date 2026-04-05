@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Command,
   FolderKanban,
+  Library,
   MessageSquare,
   Mic,
   ScanLine,
@@ -53,6 +54,7 @@ const INTEGRATIONS: Array<{ href: string; label: string; icon: typeof Mic }> = [
 const OPENCLAW: Array<{ href: string; label: string; icon: typeof MessageSquare }> = [
   { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/skills", label: "Skills", icon: Library },
   { href: "/usage", label: "Usage", icon: BarChart3 },
   { href: "/automation", label: "Automation", icon: Timer },
   { href: "/environment", label: "Environment", icon: Binary },
