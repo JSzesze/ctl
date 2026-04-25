@@ -8,17 +8,40 @@ type CtlViewShellProps = {
   children?: ReactNode;
   /** When lede is set, let it span the content width (e.g. full-width dashboards). */
   ledeFullWidth?: boolean;
+  /**
+   * Fill the AppShell content region (flex-1 min-h-0) so children can use internal scroll.
+   * Use with routes that set overflow-hidden on the shell content wrapper (e.g. Finance).
+   */
+  fillHeight?: boolean;
 };
 
 /**
  * Shared chrome for CTL command views: title, optional one-line purpose, then content.
  */
-export function CtlViewShell({ title, lede, children, ledeFullWidth }: CtlViewShellProps) {
+export function CtlViewShell({
+  title,
+  lede,
+  children,
+  ledeFullWidth,
+  fillHeight,
+}: CtlViewShellProps) {
   const hasLede = Boolean(lede?.trim());
   return (
-    <div className="w-full space-y-6">
+    <div
+      className={cn(
+        "w-full",
+        fillHeight ? "flex min-h-0 flex-1 flex-col gap-3" : "space-y-6",
+      )}
+    >
       <header
-        className={cn("border-b border-border-muted", hasLede ? "space-y-1.5 pb-5" : "pb-4")}
+        className={cn(
+          "border-b border-border-muted",
+          fillHeight
+            ? "shrink-0 space-y-1 pb-3"
+            : hasLede
+              ? "space-y-1.5 pb-5"
+              : "pb-4",
+        )}
       >
         <h1 className="text-xl font-semibold tracking-tight text-heading">{title}</h1>
         {hasLede ? (
@@ -32,7 +55,15 @@ export function CtlViewShell({ title, lede, children, ledeFullWidth }: CtlViewSh
           </p>
         ) : null}
       </header>
-      {children ? <div className="w-full pb-2">{children}</div> : null}
+      {children ? (
+        <div
+          className={cn(
+            fillHeight ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" : "w-full pb-2",
+          )}
+        >
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -21,7 +21,14 @@ function chunkEntriesForView(entries: readonly ChatEntry[]): ViewChunk[] {
         j++;
       }
       if (group.length >= 2) {
-        out.push({ kind: "tool-cluster", entries: group });
+        const anyFileArtifact = group.some((t) => t.fileArtifact);
+        if (anyFileArtifact) {
+          for (const te of group) {
+            out.push({ kind: "single", entry: te });
+          }
+        } else {
+          out.push({ kind: "tool-cluster", entries: group });
+        }
       } else {
         out.push({ kind: "single", entry: group[0] });
       }

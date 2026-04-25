@@ -40,8 +40,17 @@ import {
 import { useOpenClawGateway } from "@/hooks/use-openclaw-gateway";
 import { normalizeGatewayWebSocketUrl } from "@/lib/openclaw/gateway-url";
 import { GatewayRequestError } from "@/lib/openclaw";
+import {
+  ControlChatLayoutContext,
+  ControlChatStreamContext,
+  type ControlChatLayoutValue,
+  type ControlChatStreamValue,
+} from "@/components/control-chat-context";
 
 export type StatusKind = "idle" | "ok" | "err";
+
+export type { ControlChatLayoutValue, ControlChatStreamValue } from "@/components/control-chat-context";
+export { useControlChatLayout, useControlChatStream } from "@/components/control-chat-context";
 
 /** Gateway form, connection state, RPC — does not include log or chat UI state (avoids list re-renders on every log line). */
 export type ControlConnectionValue = {
@@ -72,25 +81,13 @@ export type ControlLogValue = {
   setLogText: Dispatch<SetStateAction<string>>;
 };
 
-export type ControlChatValue = {
-  chatModelRef: RefObject<ChatSurfaceModel | null>;
-  chatTick: number;
-  /** Re-read chat model from ref into React (after mutating the model). */
-  refreshChat: () => void;
-  chatInput: string;
-  setChatInput: (v: string) => void;
-  sessionList: SessionInfo[];
-  handleChatSessions: () => Promise<void>;
-  handleChatHistory: () => Promise<void>;
-  handleSendChat: () => Promise<void>;
-  handleStopChat: () => Promise<void>;
-};
-
-export type ControlContextValue = ControlConnectionValue & ControlLogValue & ControlChatValue;
+export type ControlContextValue = ControlConnectionValue &
+  ControlLogValue &
+  ControlChatLayoutValue &
+  ControlChatStreamValue;
 
 const ControlConnectionContext = createContext<ControlConnectionValue | null>(null);
 const ControlLogContext = createContext<ControlLogValue | null>(null);
-const ControlChatContext = createContext<ControlChatValue | null>(null);
 
 export function useControlConnection(): ControlConnectionValue {
   const v = useContext(ControlConnectionContext);
@@ -108,17 +105,11 @@ export function useControlLog(): ControlLogValue {
   return v;
 }
 
-export function useControlChat(): ControlChatValue {
-  const v = useContext(ControlChatContext);
-  if (!v) {
-    throw new Error("useControlChat must be used within ControlProvider");
-  }
-  return v;
-}
-
 export function ControlProvider({ children }: { children: ReactNode }) {
   const chatModelRef = useRef<ChatSurfaceModel | null>(null);
-  const [chatTick, bumpChat] = useReducer((x: number) => x + 1, 0);
+  const [chatLayoutTick, bumpLayoutChat] = useReducer((x: number) => x + 1, 0);
+  const [chatStreamTick, bumpStreamChat] = useReducer((x: number) => x + 1, 0);
+  const streamRefreshRafRef = useRef<number | null>(null);
 
   const [hydrated, setHydrated] = useState(false);
   const [gatewayUrl, setGatewayUrl] = useState("");
@@ -134,8 +125,31 @@ export function ControlProvider({ children }: { children: ReactNode }) {
   const [statusKind, setStatusKind] = useState<StatusKind>("idle");
 
   const refreshChat = useCallback(() => {
-    bumpChat();
+    if (streamRefreshRafRef.current != null) {
+      cancelAnimationFrame(streamRefreshRafRef.current);
+      streamRefreshRafRef.current = null;
+    }
+    bumpLayoutChat();
+    bumpStreamChat();
   }, []);
+
+  /** Coalesce high-frequency chat deltas to one React update per animation frame. */
+  const scheduleStreamRefresh = useCallback(() => {
+    if (streamRefreshRafRef.current != null) return;
+    streamRefreshRafRef.current = requestAnimationFrame(() => {
+      streamRefreshRafRef.current = null;
+      bumpStreamChat();
+    });
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (streamRefreshRafRef.current != null) {
+        cancelAnimationFrame(streamRefreshRafRef.current);
+      }
+    },
+    [],
+  );
 
   const appendLog = useCallback((line: string) => {
     setLogText((prev) => `${prev}${line}\n`);
@@ -179,6 +193,9 @@ export function ControlProvider({ children }: { children: ReactNode }) {
             } else {
               refreshChat();
             }
+          } else if (applied === "stream") {
+            chatDebug("ws chat → UI refresh (stream)", chatModelSnapshot(m));
+            scheduleStreamRefresh();
           } else if (applied) {
             chatDebug("ws chat → UI refresh", chatModelSnapshot(m));
             refreshChat();
@@ -505,10 +522,10 @@ export function ControlProvider({ children }: { children: ReactNode }) {
 
   const logValue = useMemo<ControlLogValue>(() => ({ logText, setLogText }), [logText]);
 
-  const chatValue = useMemo<ControlChatValue>(
+  const chatLayoutValue = useMemo<ControlChatLayoutValue>(
     () => ({
       chatModelRef,
-      chatTick,
+      chatLayoutTick,
       refreshChat,
       chatInput,
       setChatInput,
@@ -519,7 +536,7 @@ export function ControlProvider({ children }: { children: ReactNode }) {
       handleStopChat,
     }),
     [
-      chatTick,
+      chatLayoutTick,
       refreshChat,
       chatInput,
       sessionList,
@@ -530,10 +547,19 @@ export function ControlProvider({ children }: { children: ReactNode }) {
     ],
   );
 
+  const chatStreamValue = useMemo<ControlChatStreamValue>(
+    () => ({ chatStreamTick }),
+    [chatStreamTick],
+  );
+
   return (
     <ControlConnectionContext.Provider value={connectionValue}>
       <ControlLogContext.Provider value={logValue}>
-        <ControlChatContext.Provider value={chatValue}>{children}</ControlChatContext.Provider>
+        <ControlChatLayoutContext.Provider value={chatLayoutValue}>
+          <ControlChatStreamContext.Provider value={chatStreamValue}>
+            {children}
+          </ControlChatStreamContext.Provider>
+        </ControlChatLayoutContext.Provider>
       </ControlLogContext.Provider>
     </ControlConnectionContext.Provider>
   );

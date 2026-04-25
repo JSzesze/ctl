@@ -1,23 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
-import { Streamdown } from "streamdown";
-import { streamdownComponents, streamdownPlugins } from "@/features/chat/streamdown-config";
 
-/**
- * Streamdown “typing” polish while the gateway run is active.
- * - `isAnimating={runActive}` (required): caret + animate only during real streaming, not implicitly always-on.
- * - `stagger: 0`: new text fades in without a long per-unit queue (avoids multi-paragraph desync).
- */
-const streamingBodyAnimate = {
-  animation: "fadeIn" as const,
-  duration: 90,
-  stagger: 0,
-  sep: "word" as const,
-  easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-};
-
+/** Live assistant output is plain text so token updates stay cheap; history rows use Streamdown. */
 export type StreamingRowProps = {
   text: string;
   activity: string | null;
@@ -29,29 +15,6 @@ export type StreamingRowProps = {
    */
   runActive?: boolean;
 };
-
-function useStreamElapsed(active: boolean): string {
-  const startRef = useRef<number | null>(null);
-  const [, bump] = useState(0);
-
-  useEffect(() => {
-    if (!active) {
-      startRef.current = null;
-      return;
-    }
-    if (startRef.current == null) {
-      startRef.current = Date.now();
-    }
-    const id = window.setInterval(() => bump((n) => n + 1), 250);
-    return () => window.clearInterval(id);
-  }, [active]);
-
-  if (!active || startRef.current == null) {
-    return "";
-  }
-  const sec = (Date.now() - startRef.current) / 1000;
-  return `${sec < 10 ? sec.toFixed(1) : Math.round(sec)}s`;
-}
 
 export function StreamingRow({
   text,
@@ -65,8 +28,6 @@ export function StreamingRow({
   const trimmedActivity = activity?.trim() ? activity.trim() : null;
   const effectiveActivity =
     trimmedActivity ?? (runActive ? "Working…" : null);
-  const pulse = Boolean(runActive || trimmedActivity || showThinking || showBody);
-  const elapsed = useStreamElapsed(pulse);
 
   if (!showBody && !showThinking && effectiveActivity) {
     return (
@@ -77,9 +38,6 @@ export function StreamingRow({
       >
         <Loader2 className="size-3 animate-spin" />
         <span className="min-w-0 flex-1">{effectiveActivity}</span>
-        {elapsed ? (
-          <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/70">{elapsed}</span>
-        ) : null}
       </div>
     );
   }
@@ -94,9 +52,6 @@ export function StreamingRow({
         <div className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
           <Loader2 className="size-3 shrink-0 animate-spin" />
           <span className="min-w-0 flex-1">{effectiveActivity}</span>
-          {elapsed ? (
-            <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/70">{elapsed}</span>
-          ) : null}
         </div>
       ) : null}
 
@@ -118,21 +73,11 @@ export function StreamingRow({
                 {thinkingText.length.toLocaleString()} chars
               </span>
             ) : null}
-            {elapsed && !effectiveActivity ? (
-              <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/70">{elapsed}</span>
-            ) : null}
           </button>
           {thinkingOpen ? (
             <div className="border-t border-border/40 px-2.5 py-2 text-xs leading-relaxed">
-              <div className="max-h-64 overflow-y-auto">
-                <Streamdown
-                  mode="static"
-                  className="max-w-none text-xs leading-relaxed text-muted-foreground [&_p]:my-1 [&_h1]:my-2 [&_h2]:my-2 [&_ul]:my-1 [&_ol]:my-1"
-                  plugins={streamdownPlugins}
-                  components={streamdownComponents}
-                >
-                  {thinkingText ?? ""}
-                </Streamdown>
+              <div className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-muted-foreground">
+                {thinkingText ?? ""}
               </div>
             </div>
           ) : null}
@@ -140,15 +85,15 @@ export function StreamingRow({
       ) : null}
 
       {showBody ? (
-        <Streamdown
-          animated={streamingBodyAnimate}
-          isAnimating={runActive}
-          caret="circle"
-          plugins={streamdownPlugins}
-          components={streamdownComponents}
-        >
+        <div className="min-w-0 whitespace-pre-wrap break-words">
           {text}
-        </Streamdown>
+          {runActive ? (
+            <span
+              className="ml-px inline-block h-3.5 w-0.5 translate-y-0.5 animate-pulse rounded-sm bg-primary align-middle"
+              aria-hidden
+            />
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

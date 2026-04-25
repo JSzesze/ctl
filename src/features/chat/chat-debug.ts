@@ -5,9 +5,14 @@
  * - Verbose JSON (truncated): `localStorage.setItem("ctl:chatDebug", "verbose")`.
  *
  * Disable: `localStorage.setItem("ctl:chatDebug", "0")` (or `"false"`), then reload.
+ *
+ * **File preview** (short, readable lines; not verbose JSON):
+ * - On when chat debug is on, unless `localStorage.setItem("ctl:filePreviewDebug", "0")`.
+ * - Filter console by `ctl:file-preview` or `file-preview`.
  */
 
 const STORAGE_KEY = "ctl:chatDebug";
+const FILE_PREVIEW_DEBUG_KEY = "ctl:filePreviewDebug";
 
 export type ChatDebugLevel = "off" | "on" | "verbose";
 
@@ -27,6 +32,32 @@ export function getChatDebugLevel(): ChatDebugLevel {
 
 export function isChatDebugEnabled(): boolean {
   return getChatDebugLevel() !== "off";
+}
+
+/** Focused logs for file-artifact detection / merge. Off if chat debug is off or `ctl:filePreviewDebug` is "0". */
+export function isFilePreviewDebugEnabled(): boolean {
+  if (!isChatDebugEnabled()) return false;
+  if (typeof window === "undefined") return false;
+  try {
+    const v = globalThis.localStorage?.getItem(FILE_PREVIEW_DEBUG_KEY);
+    if (v === "0" || v === "false") return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Short, scannable logs for the file preview side panel (path/content detection).
+ * Uses `console.info` so it stays visible without enabling Verbose in Chrome.
+ */
+export function filePreviewDebug(message: string, data?: Record<string, unknown>): void {
+  if (!isFilePreviewDebugEnabled()) return;
+  if (data && Object.keys(data).length > 0) {
+    console.info(`[ctl:file-preview] ${message}`, data);
+  } else {
+    console.info(`[ctl:file-preview] ${message}`);
+  }
 }
 
 function clip(s: string, max: number): string {

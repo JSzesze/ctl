@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useControlChatStream } from "@/components/control-chat-context";
-import type { ChatEntry, ChatSurfaceModel } from "@/features/chat/chat-model";
+import type { ChatEntry, ChatSurfaceModel, RunUsage } from "@/features/chat/chat-model";
 import { ChatScrollButton } from "@/features/chat/chat-scroll-button";
 import { ChatViewport } from "@/features/chat/chat-viewport";
 import { useChatScrollPin } from "@/features/chat/hooks/use-chat-scroll-pin";
@@ -35,6 +35,36 @@ function StreamingRowLive({ chatModelRef }: { chatModelRef: RefObject<ChatSurfac
       thinkingText={m?.streamingThinking ?? null}
       runActive={runActive}
     />
+  );
+}
+
+function fmtTok(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+function UsageFooter({ chatModelRef }: { chatModelRef: RefObject<ChatSurfaceModel | null> }) {
+  const m = chatModelRef.current;
+  const usage: RunUsage | null = m?.lastRunUsage ?? null;
+  const runActive = (m?.activeRunId ?? null) !== null;
+  if (!usage || runActive) return null;
+
+  const parts: string[] = [];
+  if (usage.cacheReadTokens) parts.push(`${fmtTok(usage.cacheReadTokens)} cache`);
+  parts.push(`${fmtTok(usage.inputTokens)} in`);
+  parts.push(`${fmtTok(usage.outputTokens)} out`);
+
+  return (
+    <div className="flex items-center gap-1.5 pt-1 text-[10px] text-muted-foreground/50">
+      {usage.model ? (
+        <>
+          <span className="truncate">{usage.model.split("/").pop()}</span>
+          <span>·</span>
+        </>
+      ) : null}
+      <span>{parts.join(" · ")}</span>
+    </div>
   );
 }
 
@@ -107,6 +137,7 @@ export const ChatThreadBody = memo(function ChatThreadBody({
         onScroll={handleScroll}
       >
         <StreamingRowLive chatModelRef={chatModelRef} />
+        <UsageFooter chatModelRef={chatModelRef} />
       </ChatViewport>
 
       <ChatScrollButton visible={showScrollBtn} onClick={handleScrollToBottom} />

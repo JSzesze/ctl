@@ -6,6 +6,7 @@ export {
   chatLoadHistory,
   chatLoadSessions,
   chatSend,
+  collectSessionFileArtifacts,
   createChatModel,
   parseSessionList,
   pickSessionKeysFromList,

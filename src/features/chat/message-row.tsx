@@ -11,7 +11,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { Streamdown } from "streamdown";
+import { Button } from "@/components/ui/button";
 import type { ChatEntry } from "@/features/chat/chat-model";
+import { useFilePreviewOptional } from "@/features/chat/file-preview-context";
 import { streamdownComponents, streamdownPlugins } from "@/features/chat/streamdown-config";
 
 export type MessageRowProps = {
@@ -39,43 +41,58 @@ function statusStyles(status: ChatEntry["toolStatus"]) {
 
 function ToolRow({ entry }: { entry: ChatEntry }) {
   const [open, setOpen] = useState(false);
+  const filePreview = useFilePreviewOptional();
   const status = entry.toolStatus ?? "done";
   const { badge, border } = statusStyles(status);
   const hasDetails = Boolean(entry.toolInput?.trim() || entry.toolResult?.trim());
+  const fileArtifact = entry.fileArtifact;
 
   return (
     <div className="flex w-full min-w-0 flex-col items-stretch">
       <div
         className={`max-w-[min(100%,42rem)] rounded-lg border border-border/50 border-l-2 bg-muted/20 ${border} shadow-sm`}
       >
-        <button
-          type="button"
-          onClick={() => hasDetails && setOpen(!open)}
-          className={`flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs transition-colors ${
-            hasDetails ? "hover:bg-muted/40" : "cursor-default"
-          }`}
-          aria-expanded={open}
-        >
-          {status === "running" ? (
-            <Loader2 className="size-3.5 shrink-0 animate-spin text-violet-600 dark:text-violet-400" />
-          ) : status === "error" ? (
-            <XCircle className="size-3.5 shrink-0 text-destructive" />
-          ) : (
-            <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          )}
-          <Wrench className="size-3 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">
-            {entry.toolName ?? "tool"}
-          </span>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${badge}`}>
-            {status === "running" ? "Running" : status === "error" ? "Error" : "Done"}
-          </span>
-          {hasDetails ? (
-            <ChevronRight
-              className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
-            />
+        <div className="flex w-full items-center gap-2 px-2.5 py-2">
+          <button
+            type="button"
+            onClick={() => hasDetails && setOpen(!open)}
+            className={`flex min-w-0 flex-1 items-center gap-2 text-left text-xs transition-colors ${
+              hasDetails ? "hover:bg-muted/40" : "cursor-default"
+            }`}
+            aria-expanded={open}
+          >
+            {status === "running" ? (
+              <Loader2 className="size-3.5 shrink-0 animate-spin text-violet-600 dark:text-violet-400" />
+            ) : status === "error" ? (
+              <XCircle className="size-3.5 shrink-0 text-destructive" />
+            ) : (
+              <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            )}
+            <Wrench className="size-3 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">
+              {entry.toolName ?? "tool"}
+            </span>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${badge}`}>
+              {status === "running" ? "Running" : status === "error" ? "Error" : "Done"}
+            </span>
+            {hasDetails ? (
+              <ChevronRight
+                className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
+              />
+            ) : null}
+          </button>
+          {fileArtifact && filePreview ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="shrink-0 font-normal"
+              onClick={() => filePreview.open(fileArtifact)}
+            >
+              Open
+            </Button>
           ) : null}
-        </button>
+        </div>
         {open && hasDetails ? (
           <div className="space-y-2 border-t border-border/40 px-2.5 py-2">
             {entry.toolInput?.trim() ? (

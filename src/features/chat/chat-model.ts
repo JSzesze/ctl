@@ -1,12 +1,24 @@
 import { serializeToolArgs } from "@/features/chat/agent-event-utils";
 import {
+  type FileArtifact,
+  detectFileArtifact,
+  fileArtifactWithToolCallId,
+  mergeFileArtifact,
+} from "@/features/chat/file-artifact";
+import {
   type ContentBlock,
   extractContentBlocks,
   extractRawText,
   messageRole,
   stripEnvelope,
 } from "@/features/chat/message-text";
-import { chatDebug, chatModelSnapshot, isChatDebugEnabled } from "@/features/chat/chat-debug";
+import { clearFileArtifactCache, recallFileArtifact, rememberFileArtifact } from "@/features/chat/file-artifact-cache";
+import {
+  chatDebug,
+  chatModelSnapshot,
+  filePreviewDebug,
+  isChatDebugEnabled,
+} from "@/features/chat/chat-debug";
 import type { OpenClawMinimalClient } from "@/lib/openclaw";
 
 // ---------------------------------------------------------------------------
@@ -29,6 +41,16 @@ export type ChatEntry = {
   toolInput?: string;
   toolResult?: string;
   toolStatus?: ToolRowStatus;
+  /** Detected file path + body for preview (write/edit tools). */
+  fileArtifact?: FileArtifact;
+};
+
+export type RunUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  model?: string;
 };
 
 export type ChatSurfaceModel = {
@@ -42,6 +64,18 @@ export type ChatSurfaceModel = {
   activity: string | null;
   /** Latest reasoning/thinking text while streaming (separate from answer body). */
   streamingThinking: string | null;
+  /**
+   * Set when a live tool `result` includes a file artifact; UI opens the preview and clears this.
+   * Not used for history-only loads.
+   */
+  pendingOpenFileArtifact: FileArtifact | null;
+  /**
+   * Files modified after this time are shown in the session file bar (workspace scan).
+   * Set when the session is opened or on first send.
+   */
+  sessionActivityStartMs: number | null;
+  /** Usage from the most recent completed run. */
+  lastRunUsage: RunUsage | null;
 };
 
 export function createChatModel(initialSessionKey: string): ChatSurfaceModel {
@@ -54,7 +88,37 @@ export function createChatModel(initialSessionKey: string): ChatSurfaceModel {
     lastError: null,
     activity: null,
     streamingThinking: null,
+    pendingOpenFileArtifact: null,
+    sessionActivityStartMs: null,
+    lastRunUsage: null,
   };
+}
+
+/** Unique previewable file artifacts from tool rows (latest content per path). */
+export function collectSessionFileArtifacts(entries: readonly ChatEntry[]): FileArtifact[] {
+  const byPath = new Map<string, FileArtifact>();
+  for (const e of entries) {
+    if (e.kind === "tool" && e.fileArtifact) {
+      byPath.set(e.fileArtifact.path, e.fileArtifact);
+    }
+  }
+  return Array.from(byPath.values()).sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function syncFileArtifactCache(model: ChatSurfaceModel, entry: ChatEntry): void {
+  if (entry.kind === "tool" && entry.fileArtifact && entry.toolCallId) {
+    rememberFileArtifact(model.sessionKey, entry.toolCallId, entry.fileArtifact);
+  }
+}
+
+function rehydrateToolFileArtifacts(sessionKey: string, entries: ChatEntry[]): ChatEntry[] {
+  return entries.map((e) => {
+    if (e.kind !== "tool" || !e.toolCallId || e.fileArtifact) return e;
+    const cached = recallFileArtifact(sessionKey, e.toolCallId);
+    return cached
+      ? { ...e, fileArtifact: fileArtifactWithToolCallId(cached, e.toolCallId) }
+      : e;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +173,13 @@ function extractThinking(message: unknown): string {
     .join("\n");
 }
 
+const SESSION_DIRECTIVE_RE =
+  /^A new session was started via \/(?:new|reset)\b/;
+
+function isSessionDirective(text: string): boolean {
+  return SESSION_DIRECTIVE_RE.test(text.trim());
+}
+
 function matchesRun(model: ChatSurfaceModel, runId: string): boolean {
   if (!model.activeRunId) return false;
   return runId === model.activeRunId;
@@ -138,8 +209,43 @@ function mergeThinkingStream(prev: string | null, next: string): string {
   return `${p}${p && !p.endsWith("\n") ? "\n" : ""}${n}`;
 }
 
-/** Apply a `chat` gateway event to the model. Returns false / true / "reload" (reload history from gateway). */
-export function applyChatGatewayEvent(model: ChatSurfaceModel, payload: unknown): boolean | "reload" {
+function extractRunUsage(p: ChatEventPayload): RunUsage | null {
+  const raw = p as Record<string, unknown>;
+  const u =
+    (raw.usage as Record<string, unknown> | undefined) ??
+    ((raw.message as Record<string, unknown> | undefined)?.usage as Record<string, unknown> | undefined);
+  if (!u || typeof u !== "object") return null;
+  const inp =
+    typeof u.inputTokens === "number" ? u.inputTokens :
+    typeof u.input_tokens === "number" ? u.input_tokens :
+    typeof u.prompt_tokens === "number" ? u.prompt_tokens : 0;
+  const out =
+    typeof u.outputTokens === "number" ? u.outputTokens :
+    typeof u.output_tokens === "number" ? u.output_tokens :
+    typeof u.completion_tokens === "number" ? u.completion_tokens : 0;
+  if (inp === 0 && out === 0) return null;
+  const cr =
+    typeof u.cacheReadTokens === "number" ? u.cacheReadTokens :
+    typeof u.cache_read_tokens === "number" ? u.cache_read_tokens :
+    typeof u.cache_read_input_tokens === "number" ? u.cache_read_input_tokens : undefined;
+  const cw =
+    typeof u.cacheWriteTokens === "number" ? u.cacheWriteTokens :
+    typeof u.cache_write_tokens === "number" ? u.cache_write_tokens :
+    typeof u.cache_creation_input_tokens === "number" ? u.cache_creation_input_tokens : undefined;
+  const model =
+    typeof raw.model === "string" ? raw.model :
+    typeof u.model === "string" ? u.model : undefined;
+  return { inputTokens: inp, outputTokens: out, cacheReadTokens: cr, cacheWriteTokens: cw, model };
+}
+
+/**
+ * Apply a `chat` gateway event to the model.
+ * - `false` — ignored
+ * - `true` — model changed; refresh UI immediately
+ * - `"stream"` — only streaming buffers / activity changed; safe to coalesce refreshes (e.g. rAF)
+ * - `"reload"` — reload history from gateway
+ */
+export function applyChatGatewayEvent(model: ChatSurfaceModel, payload: unknown): boolean | "reload" | "stream" {
   const p = parseChatPayload(payload);
   if (!p?.sessionKey || p.sessionKey !== model.sessionKey) {
     if (isChatDebugEnabled() && p?.sessionKey) {
@@ -201,7 +307,7 @@ export function applyChatGatewayEvent(model: ChatSurfaceModel, payload: unknown)
       thinkingLen: thinking.length,
       ...chatModelSnapshot(model),
     });
-    return true;
+    return "stream";
   }
 
   if (state === "final") {
@@ -211,6 +317,7 @@ export function applyChatGatewayEvent(model: ChatSurfaceModel, payload: unknown)
     model.activeRunId = null;
     model.sending = false;
     model.activity = null;
+    model.lastRunUsage = extractRunUsage(p) ?? model.lastRunUsage;
     chatDebug("chat:final", {
       runId: clipRunId(runId),
       ...chatModelSnapshot(model),
@@ -313,22 +420,28 @@ export function applyAgentGatewayEvent(model: ChatSurfaceModel, payload: unknown
   if (!toolCallId) return false;
 
   if (phase === "start") {
-    const exists = model.entries.some((e) => e.kind === "tool" && e.toolCallId === toolCallId);
-    if (!exists) {
-      const toolInput = serializeToolArgs(d.args ?? d.input);
-      model.entries = [
-        ...model.entries,
-        {
-          id: `tool:${toolCallId}`,
-          role: "system",
-          text: "",
-          kind: "tool",
-          toolName: name,
-          toolCallId,
-          toolInput,
-          toolStatus: "running",
-        },
-      ];
+    const toolInput = serializeToolArgs(d.args ?? d.input);
+    const detected = detectFileArtifact(name, toolInput) ?? undefined;
+    const fileArtifact = fileArtifactWithToolCallId(detected, toolCallId);
+    const idx = findToolRowIndex(model, toolCallId, name);
+    if (idx >= 0) {
+      // Streaming / repeated start: same toolCallId with growing args (e.g. file body).
+      patchToolEntry(model, idx, { toolInput, fileArtifact });
+      syncFileArtifactCache(model, model.entries[idx]!);
+    } else {
+      const entry: ChatEntry = {
+        id: `tool:${toolCallId}`,
+        role: "system",
+        text: "",
+        kind: "tool",
+        toolName: name,
+        toolCallId,
+        toolInput,
+        toolStatus: "running",
+        fileArtifact,
+      };
+      model.entries = [...model.entries, entry];
+      syncFileArtifactCache(model, entry);
     }
     model.activity = `Using ${name}`;
     return true;
@@ -343,27 +456,46 @@ export function applyAgentGatewayEvent(model: ChatSurfaceModel, payload: unknown
     const idx = findToolRowIndex(model, toolCallId, name);
 
     if (idx >= 0) {
+      const prevEntry = model.entries[idx];
       const preview =
         displayResult.length > 500 ? `${displayResult.slice(0, 500)}…` : displayResult || "—";
+      const mergedArtifact = mergeFileArtifact(
+        prevEntry.fileArtifact,
+        name,
+        prevEntry.toolInput,
+        displayResult,
+      );
+      const fileArtifact = fileArtifactWithToolCallId(mergedArtifact, toolCallId);
       patchToolEntry(model, idx, {
         toolResult: displayResult || "—",
         toolStatus: errMsg ? "error" : "done",
         text: preview,
+        fileArtifact,
       });
+      const doneEntry = model.entries[idx];
+      syncFileArtifactCache(model, doneEntry);
+      if (!errMsg && doneEntry.fileArtifact) {
+        model.pendingOpenFileArtifact = doneEntry.fileArtifact;
+      }
     } else {
-      model.entries = [
-        ...model.entries,
-        {
-          id: `tool:${toolCallId}:late`,
-          role: "system",
-          text: displayResult.slice(0, 200) + (displayResult.length > 200 ? "…" : "") || name,
-          kind: "tool",
-          toolName: name,
-          toolCallId,
-          toolResult: displayResult || undefined,
-          toolStatus: errMsg ? "error" : "done",
-        },
-      ];
+      const mergedLate = mergeFileArtifact(undefined, name, undefined, displayResult);
+      const fileArtifact = fileArtifactWithToolCallId(mergedLate, toolCallId);
+      const lateEntry: ChatEntry = {
+        id: `tool:${toolCallId}:late`,
+        role: "system",
+        text: displayResult.slice(0, 200) + (displayResult.length > 200 ? "…" : "") || name,
+        kind: "tool",
+        toolName: name,
+        toolCallId,
+        toolResult: displayResult || undefined,
+        toolStatus: errMsg ? "error" : "done",
+        fileArtifact,
+      };
+      model.entries = [...model.entries, lateEntry];
+      syncFileArtifactCache(model, lateEntry);
+      if (!errMsg && lateEntry.fileArtifact) {
+        model.pendingOpenFileArtifact = lateEntry.fileArtifact;
+      }
     }
     return true;
   }
@@ -392,6 +524,7 @@ export function applySessionMessageEvent(model: ChatSurfaceModel, payload: unkno
   const id = `sm:${role}:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`;
 
   if (role === "user") {
+    if (isSessionDirective(text)) return false;
     const cleaned = stripEnvelope(text);
     const last = model.entries[model.entries.length - 1];
     if (last?.role === "user" && last.text === cleaned) return false;
@@ -421,6 +554,9 @@ export async function chatLoadHistory(
     model.lastError = "Set a session key first.";
     return;
   }
+  if (model.sessionActivityStartMs == null) {
+    model.sessionActivityStartMs = Date.now();
+  }
   const res = (await client.request("chat.history", {
     sessionKey: key,
     limit: 200,
@@ -439,6 +575,7 @@ export async function chatLoadHistory(
         .map((b) => b.text)
         .join("\n")
         .trim();
+      if (isSessionDirective(raw)) continue;
       const text = stripEnvelope(raw);
       entries.push({ id: `h:user:${idx++}`, role: "user", text: text || "[message]" });
     } else if (role === "assistant") {
@@ -490,6 +627,10 @@ export async function chatLoadHistory(
           const fallbackText =
             preview ||
             (block.input ? `${block.toolName} — ${block.input.slice(0, 120)}` : block.toolName);
+          const fileArtifact = fileArtifactWithToolCallId(
+            mergeFileArtifact(undefined, block.toolName, block.input, resultText),
+            block.toolCallId,
+          );
           entries.push({
             id: `h:tool:${idx++}`,
             role: "system",
@@ -500,12 +641,17 @@ export async function chatLoadHistory(
             toolInput: block.input,
             toolResult: resultText || undefined,
             toolStatus: "done",
+            fileArtifact,
           });
           i = j;
           continue;
         }
         if (block.type === "tool_result") {
           const preview = block.text.length > 200 ? `${block.text.slice(0, 200)}…` : block.text;
+          const fileArtifact = fileArtifactWithToolCallId(
+            mergeFileArtifact(undefined, block.toolName ?? "tool output", undefined, block.text),
+            block.toolCallId,
+          );
           entries.push({
             id: `h:toolres:${idx++}`,
             role: "system",
@@ -515,6 +661,7 @@ export async function chatLoadHistory(
             toolCallId: block.toolCallId,
             toolResult: block.text,
             toolStatus: "done",
+            fileArtifact,
           });
           i += 1;
           continue;
@@ -531,11 +678,16 @@ export async function chatLoadHistory(
         if (e.kind !== "tool") continue;
         if (toolCallId && e.toolCallId && e.toolCallId === toolCallId) {
           const pvw = body.length > 240 ? `${body.slice(0, 240)}…` : body;
+          const fileArtifact = fileArtifactWithToolCallId(
+            mergeFileArtifact(e.fileArtifact, e.toolName ?? "tool", e.toolInput, body),
+            e.toolCallId ?? toolCallId,
+          );
           entries[k] = {
             ...e,
             toolResult: body,
             toolStatus: "done",
             text: pvw || e.text,
+            fileArtifact,
           };
           patched = true;
           break;
@@ -546,12 +698,17 @@ export async function chatLoadHistory(
           const e = entries[k];
           if (e.kind === "tool" && !(e.toolResult && e.toolResult.trim())) {
             const pvw = body.length > 240 ? `${body.slice(0, 240)}…` : body;
+            const fileArtifact = fileArtifactWithToolCallId(
+              mergeFileArtifact(e.fileArtifact, e.toolName ?? "tool", e.toolInput, body),
+              e.toolCallId ?? toolCallId,
+            );
             entries[k] = {
               ...e,
               toolCallId: e.toolCallId ?? toolCallId,
               toolResult: body,
               toolStatus: "done",
               text: pvw || e.text,
+              fileArtifact,
             };
             patched = true;
             break;
@@ -560,6 +717,10 @@ export async function chatLoadHistory(
       }
       if (!patched) {
         const pvw = body.length > 200 ? `${body.slice(0, 200)}…` : body;
+        const fileArtifact = fileArtifactWithToolCallId(
+          mergeFileArtifact(undefined, "tool output", undefined, body),
+          toolCallId,
+        );
         entries.push({
           id: `h:toolmsg:${idx++}`,
           role: "system",
@@ -569,12 +730,25 @@ export async function chatLoadHistory(
           toolCallId,
           toolResult: body || undefined,
           toolStatus: "done",
+          fileArtifact,
         });
       }
     }
   }
 
-  model.entries = entries;
+  const rehydrated = rehydrateToolFileArtifacts(key, entries);
+  for (const e of rehydrated) {
+    syncFileArtifactCache(model, e);
+  }
+
+  const toolRows = rehydrated.filter((e) => e.kind === "tool");
+  filePreviewDebug("chat.history:loaded", {
+    entryCount: rehydrated.length,
+    toolRowCount: toolRows.length,
+    toolRowsWithFileArtifact: toolRows.filter((e) => e.fileArtifact).length,
+  });
+
+  model.entries = rehydrated;
   model.streaming = "";
   model.streamingThinking = null;
   model.activity = null;
@@ -596,6 +770,9 @@ export async function chatSend(
   if (!key || !msg) {
     model.lastError = !key ? "Set a session key." : "Enter a message.";
     return;
+  }
+  if (model.sessionActivityStartMs == null) {
+    model.sessionActivityStartMs = Date.now();
   }
   model.lastError = null;
   const runId =

@@ -326,7 +326,8 @@ export function UsagePanel() {
         rpc("sessions.usage", {
           ...dateBody,
           limit: SESSIONS_USAGE_LIMIT,
-          includeContextWeight: true,
+          /** Context weight is for system-prompt breakdown only; keep off so totals match transcript math. */
+          includeContextWeight: false,
         }),
         rpc("usage.cost", dateBody),
       ]);

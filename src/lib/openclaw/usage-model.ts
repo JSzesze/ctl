@@ -66,6 +66,23 @@ function num(v: unknown, fallback = 0): number {
   return fallback;
 }
 
+/** First matching numeric field (OpenClaw `normalizeUsage` / provider aliases). */
+function numFirst(o: Record<string, unknown>, keys: string[]): number {
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      return v;
+    }
+    if (typeof v === "string" && v.trim() !== "") {
+      const n = Number(v);
+      if (Number.isFinite(n)) {
+        return n;
+      }
+    }
+  }
+  return 0;
+}
+
 export function emptyUsageTotals(): UsageTotalsParsed {
   return {
     input: 0,
@@ -82,24 +99,64 @@ export function emptyUsageTotals(): UsageTotalsParsed {
   };
 }
 
+/**
+ * OpenClaw aggregates per message with `usage.total ?? sum(parts)` (`applyUsageTotals`), but
+ * daily buckets and on-disk views use **only** the sum of parts. Provider `total` can disagree
+ * with the breakdown; prefer the breakdown whenever it is non-zero so CTL matches transcript
+ * math and files like `agents/<id>/sessions/token-usage.json` / cost daily rollups.
+ */
+export function reconcileUsageTotalsTokens(t: UsageTotalsParsed): UsageTotalsParsed {
+  const sum = t.input + t.output + t.cacheRead + t.cacheWrite;
+  if (sum > 0) {
+    return { ...t, totalTokens: sum };
+  }
+  return t;
+}
+
 export function parseUsageTotalsFromUnknown(v: unknown): UsageTotalsParsed {
   const o = asRecord(v);
   if (!o) {
     return emptyUsageTotals();
   }
-  return {
-    input: num(o.input),
-    output: num(o.output),
-    cacheRead: num(o.cacheRead),
-    cacheWrite: num(o.cacheWrite),
-    totalTokens: num(o.totalTokens),
-    totalCost: num(o.totalCost),
-    inputCost: num(o.inputCost),
-    outputCost: num(o.outputCost),
-    cacheReadCost: num(o.cacheReadCost),
-    cacheWriteCost: num(o.cacheWriteCost),
+
+  let cachedFromPrompt = 0;
+  const ptd = o.prompt_tokens_details;
+  if (ptd && typeof ptd === "object" && !Array.isArray(ptd)) {
+    const pd = ptd as Record<string, unknown>;
+    const c = pd.cached_tokens;
+    if (typeof c === "number" && Number.isFinite(c)) {
+      cachedFromPrompt = c;
+    }
+  }
+
+  const cacheReadDirect = numFirst(o, [
+    "cacheRead",
+    "cache_read",
+    "cache_read_input_tokens",
+    "cached_tokens",
+  ]);
+  const cacheRead = cacheReadDirect > 0 ? cacheReadDirect : cachedFromPrompt;
+
+  const raw: UsageTotalsParsed = {
+    input: numFirst(o, ["input", "inputTokens", "input_tokens", "promptTokens", "prompt_tokens"]),
+    output: numFirst(o, [
+      "output",
+      "outputTokens",
+      "output_tokens",
+      "completionTokens",
+      "completion_tokens",
+    ]),
+    cacheRead,
+    cacheWrite: numFirst(o, ["cacheWrite", "cache_write", "cache_creation_input_tokens"]),
+    totalTokens: numFirst(o, ["totalTokens", "total_tokens", "total", "tokens"]),
+    totalCost: numFirst(o, ["totalCost", "total_cost", "cost"]),
+    inputCost: numFirst(o, ["inputCost", "input_cost"]),
+    outputCost: numFirst(o, ["outputCost", "output_cost"]),
+    cacheReadCost: numFirst(o, ["cacheReadCost", "cache_read_cost"]),
+    cacheWriteCost: numFirst(o, ["cacheWriteCost", "cache_write_cost"]),
     missingCostEntries: num(o.missingCostEntries),
   };
+  return reconcileUsageTotalsTokens(raw);
 }
 
 function parseSessionEntry(e: unknown): SessionUsageRow | null {
@@ -135,14 +192,8 @@ function parseDailyFromAggEntry(d: unknown): DailyBreakdownRow | null {
   if (!o || typeof o.date !== "string") {
     return null;
   }
-  const tokens = num(o.tokens);
-  const cost = num(o.cost);
-  return {
-    date: o.date,
-    ...emptyUsageTotals(),
-    totalTokens: tokens,
-    totalCost: cost,
-  };
+  /** Full row parse (picks up breakdown + `tokens` / `cost` aliases). */
+  return { date: o.date, ...parseUsageTotalsFromUnknown(o) };
 }
 
 function parseModelRow(m: unknown): ModelUsageRow | null {
@@ -155,11 +206,15 @@ function parseModelRow(m: unknown): ModelUsageRow | null {
   if (!id) {
     return null;
   }
+  const totalsRaw =
+    o.totals != null && typeof o.totals === "object" && !Array.isArray(o.totals)
+      ? o.totals
+      : o;
   return {
     model: model || id,
     provider: typeof o.provider === "string" ? o.provider : undefined,
     count: num(o.count),
-    totals: parseUsageTotalsFromUnknown(o.totals),
+    totals: parseUsageTotalsFromUnknown(totalsRaw),
   };
 }
 

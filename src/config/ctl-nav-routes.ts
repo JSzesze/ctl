@@ -15,6 +15,12 @@ export const CTL_NAV_ROUTES: CtlNavRoute[] = [
   { href: "/projects", label: "Projects", keywords: ["kanban", "work"], group: "Command" },
   { href: "/meetings", label: "Meetings", keywords: ["calendar", "video"], group: "Command" },
   { href: "/radar", label: "Radar", keywords: ["scan", "watch"], group: "Command" },
+  {
+    href: "/finance",
+    label: "Finance",
+    keywords: ["budget", "money", "transactions", "0budget", "categorization", "uncategorized"],
+    group: "Command",
+  },
   { href: "/chat", label: "Chat", keywords: ["message", "openclaw"], group: "OpenClaw" },
   {
     href: "/agents",

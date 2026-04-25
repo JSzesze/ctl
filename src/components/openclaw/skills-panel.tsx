@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { btnClass, primaryBtnClass } from "@/components/control-button-classes";
+import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { btnClass } from "@/components/control-button-classes";
 import { useControlConnection } from "@/components/control-provider";
 import { JsonPreview } from "@/components/openclaw/json-preview";
 import { OpenClawDisconnectedHint } from "@/components/openclaw/disconnected-hint";
@@ -12,6 +12,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { STORAGE_SELECTED_AGENT_ID } from "@/config/storage-keys";
 import { GatewayRequestError } from "@/lib/openclaw";
 
@@ -56,55 +58,109 @@ function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 }
 
-const SKILL_FOLDER_RE = /^[a-z][a-z0-9_]*$/;
+type SkillUiStatus = {
+  label: "Ready" | "Not Ready";
+  title: string;
+  detail: "ready" | "disabled" | "inactive";
+};
 
-function extractNameFromFrontmatter(text: string): string | null {
-  const t = text.trimStart();
-  if (!t.startsWith("---")) {
-    return null;
+/** Derived UI status from gateway `disabled` + `eligible` (see OpenClaw skills docs). */
+function skillRowStatus(s: SkillStatusEntry): SkillUiStatus {
+  if (s.disabled) {
+    return {
+      label: "Not Ready",
+      title: "Turned off in skills config (e.g. skills.entries.*.enabled).",
+      detail: "disabled",
+    };
   }
-  const end = t.indexOf("\n---", 3);
-  if (end < 0) {
-    return null;
+  if (s.eligible) {
+    return {
+      label: "Ready",
+      title: "Eligible for this session: can be included in the agent prompt and snapshot.",
+      detail: "ready",
+    };
   }
-  const fm = t.slice(3, end);
-  const m = fm.match(/^name:\s*(.+)$/m);
-  if (!m?.[1]) {
-    return null;
-  }
-  return m[1].trim().replace(/^["']|["']$/g, "");
+  return {
+    label: "Not Ready",
+    title:
+      "Enabled in config, but not eligible yet (allowlists, allowBundled, or SKILL.md metadata gates).",
+    detail: "inactive",
+  };
 }
 
-function localSkillTemplate(folderName: string): string {
-  return `---
-name: ${folderName}
-description: >-
-  TODO: One line for the agent — when to use this skill.
----
-
-# ${folderName.replace(/_/g, " ")}
-
-## When to use
-
--
-
-## Instructions
-
-
-`;
+function codeSnippet(s: string): ReactNode {
+  return <code className="rounded bg-muted px-1 py-px font-mono text-[0.65rem]">{s}</code>;
 }
 
-function triggerDownload(filename: string, content: string): void {
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+function StatusInactiveTooltip({ skill }: { skill: SkillStatusEntry }) {
+  return (
+    <div className="space-y-2 text-xs leading-relaxed">
+      <p className="font-medium text-foreground">Why not ready?</p>
+      <p className="text-muted-foreground">
+        The skill is enabled in config, but OpenClaw does not treat it as eligible yet. Common causes:
+      </p>
+      <ul className="list-disc space-y-1.5 pl-4 text-muted-foreground">
+        <li>
+          <span className="text-foreground">Agent allowlist</span> — when{" "}
+          {codeSnippet("agents.defaults.skills")} or {codeSnippet("agents.list[].skills")} is set, only listed skills
+          are eligible.
+        </li>
+        <li>
+          <span className="text-foreground">Bundled allowlist</span> — {codeSnippet("skills.allowBundled")} can restrict
+          which bundled skills qualify.
+        </li>
+        <li>
+          <span className="text-foreground">SKILL.md metadata</span> — {codeSnippet("metadata.openclaw.requires")}{" "}
+          (bins on PATH, env vars, config flags) or {codeSnippet("os")} gating not satisfied.
+        </li>
+      </ul>
+      {skill.blockedByAllowlist ? (
+        <p className="text-muted-foreground">
+          This row is flagged as blocked by the effective agent allowlist.
+        </p>
+      ) : null}
+      <p className="text-[0.65rem] text-muted-foreground">
+        <a
+          href="https://docs.openclaw.ai/tools/skills"
+          className="text-foreground underline-offset-2 hover:underline"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Skills
+        </a>
+        {" · "}
+        <a
+          href="https://docs.openclaw.ai/tools/skills-config"
+          className="text-foreground underline-offset-2 hover:underline"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Skills config
+        </a>
+      </p>
+    </div>
+  );
+}
+
+function SkillStatusCell({ skill }: { skill: SkillStatusEntry }) {
+  const status = skillRowStatus(skill);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help border-b border-dotted border-muted-foreground/60 text-muted-foreground underline-offset-2">
+          {status.label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="start" className="max-w-[min(22rem,calc(100vw-2rem))]">
+        {status.detail === "inactive" ? (
+          <StatusInactiveTooltip skill={skill} />
+        ) : (
+          <p className="max-w-[18rem] text-xs leading-relaxed">{status.title}</p>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function normalizeSkillStatusRow(row: unknown): SkillStatusEntry {
@@ -139,23 +195,11 @@ export function SkillsPanel() {
   const [statusReport, setStatusReport] = useState<SkillStatusReport | null>(null);
   const [listLoading, setListLoading] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
-  const [installLoading, setInstallLoading] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [updateLoading, setUpdateLoading] = useState(false);
   const [toggleKey, setToggleKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [clawhubSlug, setClawhubSlug] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<unknown>(null);
-  const [localFolderName, setLocalFolderName] = useState("distill");
-  const [localSkillBody, setLocalSkillBody] = useState(() => localSkillTemplate("distill"));
-  const [localNotice, setLocalNotice] = useState<string | null>(null);
 
   const [inspectOpen, setInspectOpen] = useState(false);
   const [inspectSkill, setInspectSkill] = useState<SkillStatusEntry | null>(null);
-  const [clawhubInspect, setClawhubInspect] = useState<unknown>(null);
-  const [clawhubInspectLoading, setClawhubInspectLoading] = useState(false);
-  const [clawhubInspectErr, setClawhubInspectErr] = useState<string | null>(null);
   const [inspectCopyNotice, setInspectCopyNotice] = useState<string | null>(null);
 
   const agents = agentsPayload?.agents ?? [];
@@ -225,41 +269,6 @@ export function SkillsPanel() {
     void loadStatus();
   }, [agentId, connected, loadStatus]);
 
-  const inspectSlug =
-    inspectSkill?.skillKey?.trim() || inspectSkill?.name?.trim() || "";
-
-  useEffect(() => {
-    if (!inspectOpen || !inspectSkill || !inspectSlug) {
-      setClawhubInspect(null);
-      setClawhubInspectErr(null);
-      setClawhubInspectLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setClawhubInspectLoading(true);
-    setClawhubInspect(null);
-    setClawhubInspectErr(null);
-    void rpc("skills.detail", { slug: inspectSlug })
-      .then((d) => {
-        if (!cancelled) {
-          setClawhubInspect(d);
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setClawhubInspectErr(formatError(e));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setClawhubInspectLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [inspectOpen, inspectSkill, inspectSlug, rpc]);
-
   const openInspector = useCallback((s: SkillStatusEntry) => {
     setInspectSkill(s);
     setInspectOpen(true);
@@ -270,8 +279,6 @@ export function SkillsPanel() {
     setInspectOpen(open);
     if (!open) {
       setInspectSkill(null);
-      setClawhubInspect(null);
-      setClawhubInspectErr(null);
       setInspectCopyNotice(null);
     }
   }, []);
@@ -294,58 +301,6 @@ export function SkillsPanel() {
       localStorage.setItem(STORAGE_SELECTED_AGENT_ID, id);
     }
   }, []);
-
-  const onInstallClawhub = useCallback(async () => {
-    const slug = clawhubSlug.trim();
-    if (!slug || installLoading) {
-      return;
-    }
-    setInstallLoading(true);
-    setError(null);
-    try {
-      await rpc("skills.install", { source: "clawhub", slug });
-      setClawhubSlug("");
-      await loadStatus();
-    } catch (e) {
-      setError(formatError(e));
-    } finally {
-      setInstallLoading(false);
-    }
-  }, [clawhubSlug, installLoading, loadStatus, rpc]);
-
-  const onSearch = useCallback(async () => {
-    const q = searchQuery.trim();
-    if (!q || searchLoading) {
-      return;
-    }
-    setSearchLoading(true);
-    setError(null);
-    try {
-      const raw = (await rpc("skills.search", { query: q, limit: 15 })) as { results?: unknown };
-      setSearchResults(raw?.results ?? raw);
-    } catch (e) {
-      setError(formatError(e));
-      setSearchResults(null);
-    } finally {
-      setSearchLoading(false);
-    }
-  }, [rpc, searchLoading, searchQuery]);
-
-  const onUpdateClawhubAll = useCallback(async () => {
-    if (updateLoading) {
-      return;
-    }
-    setUpdateLoading(true);
-    setError(null);
-    try {
-      await rpc("skills.update", { source: "clawhub", all: true });
-      await loadStatus();
-    } catch (e) {
-      setError(formatError(e));
-    } finally {
-      setUpdateLoading(false);
-    }
-  }, [loadStatus, rpc, updateLoading]);
 
   const onToggleSkillEnabled = useCallback(
     async (skillKey: string, isDisabledNow: boolean) => {
@@ -371,67 +326,6 @@ export function SkillsPanel() {
 
   const selectClass =
     "max-w-md rounded-md border border-border-input bg-surface-input px-2 py-1.5 text-sm text-foreground";
-  const textareaClass =
-    "min-h-[14rem] w-full max-w-3xl rounded-md border border-border-input bg-surface-input px-3 py-2 font-mono text-sm leading-relaxed text-foreground";
-
-  const resolvedSkillPath =
-    statusReport?.workspaceDir && localFolderName.trim()
-      ? `${statusReport.workspaceDir.replace(/\/+$/, "")}/skills/${localFolderName.trim()}/SKILL.md`
-      : `skills/${localFolderName.trim() || "<folder>"}/SKILL.md`;
-
-  const onLocalMdFile = useCallback((file: File | null) => {
-    setLocalNotice(null);
-    if (!file) {
-      return;
-    }
-    void file.text().then((text) => {
-      setLocalSkillBody(text);
-      const fromFm = extractNameFromFrontmatter(text);
-      if (fromFm && SKILL_FOLDER_RE.test(fromFm)) {
-        setLocalFolderName(fromFm);
-      }
-      setLocalNotice(`Loaded ${file.name} (${text.length} chars).`);
-    });
-  }, []);
-
-  const onDownloadLocalSkill = useCallback(() => {
-    setLocalNotice(null);
-    const folder = localFolderName.trim();
-    if (!SKILL_FOLDER_RE.test(folder)) {
-      setLocalNotice("Folder name must be snake_case: a–z start, then a–z, 0–9, underscores.");
-      return;
-    }
-    const body = localSkillBody;
-    if (!body.trim()) {
-      setLocalNotice("Paste or upload SKILL.md content first.");
-      return;
-    }
-    triggerDownload("SKILL.md", body);
-    setLocalNotice(`Downloaded SKILL.md — place it at ${resolvedSkillPath} on the gateway host, then Refresh skills.`);
-  }, [localFolderName, localSkillBody, resolvedSkillPath]);
-
-  const onCopyLocalSkill = useCallback(() => {
-    setLocalNotice(null);
-    const body = localSkillBody;
-    if (!body.trim()) {
-      setLocalNotice("Nothing to copy.");
-      return;
-    }
-    void navigator.clipboard.writeText(body).then(
-      () => setLocalNotice("Copied SKILL.md contents to clipboard."),
-      () => setLocalNotice("Could not copy (permission denied)."),
-    );
-  }, [localSkillBody]);
-
-  const onFillTemplate = useCallback(() => {
-    const folder = localFolderName.trim();
-    if (!SKILL_FOLDER_RE.test(folder)) {
-      setLocalNotice("Set a valid folder name first (snake_case).");
-      return;
-    }
-    setLocalSkillBody(localSkillTemplate(folder));
-    setLocalNotice("Filled template — edit frontmatter and body, then download or copy.");
-  }, [localFolderName]);
 
   if (!connected) {
     return (
@@ -447,63 +341,14 @@ export function SkillsPanel() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-heading">Skills</h1>
-            <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-              Gateway RPCs <code className="text-foreground">skills.status</code>,{" "}
-              <code className="text-foreground">skills.search</code>, <code className="text-foreground">skills.install</code>
-              , <code className="text-foreground">skills.update</code>. Workspace{" "}
-              <code className="text-foreground">skills/*/SKILL.md</code> is{" "}
-              <span className="text-foreground">not</span> editable through{" "}
-              <code className="text-foreground">agents.files.*</code> (those RPCs only allow fixed bootstrap names like{" "}
-              <code className="text-foreground">AGENTS.md</code>). Edit SKILL files on disk at the path shown below, or
-              install from{" "}
-              <a href="https://clawhub.ai" className="text-foreground underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
-                ClawHub
-              </a>{" "}
-              (published slugs only — 404 means not on ClawHub). There is no gateway RPC to push arbitrary skill files
-              from the browser; use{" "}
-              <span className="text-foreground">Local skill</span> below to download or copy, then save on the machine
-              that hosts the workspace.
-            </p>
-            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <li>
-                <a
-                  href="https://docs.openclaw.ai/tools/creating-skills#creating-skills"
-                  className="text-foreground underline-offset-2 hover:underline"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Creating skills
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://docs.openclaw.ai/tools/skills-config"
-                  className="text-foreground underline-offset-2 hover:underline"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Skills config
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://docs.openclaw.ai/tools/skills"
-                  className="text-foreground underline-offset-2 hover:underline"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Skills (load order &amp; allowlists)
-                </a>
-              </li>
-            </ul>
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label htmlFor="ctl-skills-agent" className="mb-0.5 block text-[0.65rem] font-medium text-label">
-                Agent
+              <label htmlFor="ctl-skills-workspace" className="mb-0.5 block text-[0.65rem] font-medium text-label">
+                Workspace
               </label>
               <select
-                id="ctl-skills-agent"
+                id="ctl-skills-workspace"
                 className={selectClass}
                 disabled={listLoading || agents.length === 0}
                 value={agentId}
@@ -537,120 +382,6 @@ export function SkillsPanel() {
       ) : null}
 
       <div className="space-y-6 px-4 py-4 sm:px-5">
-        <section className="space-y-3 rounded-xl border border-border-muted bg-surface-status/60 p-4">
-          <h2 className="text-sm font-medium text-heading">ClawHub</h2>
-          <div className="flex max-w-xl flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1">
-              <label htmlFor="ctl-clawhub-slug" className="mb-0.5 block text-[0.65rem] font-medium text-label">
-                Install slug
-              </label>
-              <input
-                id="ctl-clawhub-slug"
-                className={selectClass}
-                placeholder="skill-slug"
-                value={clawhubSlug}
-                onChange={(e) => setClawhubSlug(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-            <button
-              type="button"
-              className={primaryBtnClass}
-              disabled={installLoading || !clawhubSlug.trim()}
-              onClick={() => void onInstallClawhub()}
-            >
-              {installLoading ? "Installing…" : "Install"}
-            </button>
-            <button type="button" className={btnClass} disabled={updateLoading} onClick={() => void onUpdateClawhubAll()}>
-              {updateLoading ? "Updating…" : "Update all (ClawHub)"}
-            </button>
-          </div>
-          <p className="text-[0.65rem] text-muted-foreground">
-            <code className="text-foreground">skills.install</code> / ClawHub updates use the gateway&apos;s default
-            agent workspace; switch the main agent in OpenClaw config if installs land in the wrong folder.
-          </p>
-          <div className="flex max-w-xl flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1">
-              <label htmlFor="ctl-skills-search" className="mb-0.5 block text-[0.65rem] font-medium text-label">
-                Search ClawHub
-              </label>
-              <input
-                id="ctl-skills-search"
-                className={selectClass}
-                placeholder="query"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-            <button type="button" className={btnClass} disabled={searchLoading || !searchQuery.trim()} onClick={() => void onSearch()}>
-              {searchLoading ? "Searching…" : "Search"}
-            </button>
-          </div>
-          {searchResults != null ? (
-            <JsonPreview value={searchResults} maxHeightClassName="max-h-56" />
-          ) : null}
-          <p className="text-[0.65rem] text-muted-foreground">
-            A <code className="text-foreground">404 Skill not found</code> from ClawHub means that slug was never
-            published there — it is not something CTL can fix. Use the next section for your own markdown.
-          </p>
-        </section>
-
-        <section className="space-y-3 rounded-xl border border-border-muted bg-surface-status/60 p-4">
-          <h2 className="text-sm font-medium text-heading">Local skill (paste or upload)</h2>
-          <p className="max-w-3xl text-[0.65rem] leading-relaxed text-muted-foreground">
-            Save as <code className="text-foreground">SKILL.md</code> inside{" "}
-            <code className="text-foreground">skills/&lt;folder&gt;/</code> on the gateway host (folder name should match{" "}
-            <code className="text-foreground">name:</code> in YAML). Then click <span className="text-foreground">Refresh skills</span>{" "}
-            or start a new session. Publishing to ClawHub is optional.
-          </p>
-          <div className="flex max-w-xl flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1">
-              <label htmlFor="ctl-local-skill-folder" className="mb-0.5 block text-[0.65rem] font-medium text-label">
-                Folder under skills/ (snake_case)
-              </label>
-              <input
-                id="ctl-local-skill-folder"
-                className={selectClass}
-                value={localFolderName}
-                onChange={(e) => setLocalFolderName(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-            <div>
-              <label className="mb-0.5 block text-[0.65rem] font-medium text-label">Upload .md</label>
-              <input
-                type="file"
-                accept=".md,text/markdown,text/plain"
-                className="max-w-xs text-xs file:mr-2"
-                onChange={(e) => onLocalMdFile(e.target.files?.[0] ?? null)}
-              />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={btnClass} onClick={onFillTemplate}>
-              Fill template
-            </button>
-            <button type="button" className={primaryBtnClass} onClick={onDownloadLocalSkill}>
-              Download SKILL.md
-            </button>
-            <button type="button" className={btnClass} onClick={onCopyLocalSkill}>
-              Copy to clipboard
-            </button>
-          </div>
-          <p className="break-all font-mono text-[0.65rem] text-foreground/90" title={resolvedSkillPath}>
-            Target: <code className="text-foreground">{resolvedSkillPath}</code>
-          </p>
-          <textarea
-            className={textareaClass}
-            spellCheck={false}
-            value={localSkillBody}
-            onChange={(e) => setLocalSkillBody(e.target.value)}
-            aria-label="Local SKILL.md content"
-          />
-          {localNotice ? <p className="text-xs text-muted-foreground">{localNotice}</p> : null}
-        </section>
-
         {statusReport?.workspaceDir ? (
           <p className="truncate text-[0.65rem] text-muted-foreground" title={statusReport.workspaceDir}>
             <span className="text-label">Workspace</span>{" "}
@@ -663,29 +394,57 @@ export function SkillsPanel() {
           {statusLoading && skills.length === 0 ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : skills.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No skills in the status report for this agent.</p>
+            <p className="text-sm text-muted-foreground">No skills in the status report for this workspace.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border-muted">
-              <table className="w-full min-w-[44rem] border-collapse text-left text-sm">
+              <table className="w-full min-w-[38rem] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border-muted bg-surface-status/90 text-xs text-label">
                     <th className="px-3 py-2 font-medium">Name</th>
                     <th className="px-3 py-2 font-medium">Source</th>
-                    <th className="px-3 py-2 font-medium">Eligible</th>
+                    <th className="max-w-[6.5rem] px-3 py-2 font-medium">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span tabIndex={0} className="cursor-help border-b border-dotted border-muted-foreground/50">
+                            Status
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="start" className="max-w-[18rem] text-xs leading-relaxed">
+                          <p>
+                            <span className="font-medium text-foreground">Ready</span> — enabled in config and eligible
+                            for prompt and snapshot. <span className="font-medium text-foreground">Not Ready</span> — either
+                            turned off in config or not eligible yet; hover a cell for details.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </th>
                     <th className="px-3 py-2 font-medium">Path</th>
-                    <th className="px-3 py-2 font-medium">View</th>
-                    <th className="px-3 py-2 font-medium">Config</th>
+                    <th className="w-0 px-3 py-2 font-medium whitespace-nowrap">Enabled</th>
                   </tr>
                 </thead>
                 <tbody>
                   {skills.map((s, i) => {
                     const rowKey = s.skillKey ?? s.name ?? `skill-${i}`;
                     const configKey = s.skillKey ?? s.name;
-                    const eligible = Boolean(s.eligible);
                     const disabled = Boolean(s.disabled);
                     const toggling = configKey ? toggleKey === configKey : false;
+                    const nameForA11y = s.name?.trim() || "skill";
+                    const onRowActivate = () => openInspector(s);
+                    const onRowKeyDown = (e: KeyboardEvent<HTMLTableRowElement>) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onRowActivate();
+                      }
+                    };
                     return (
-                      <tr key={`${rowKey}-${i}`} className="border-b border-border-muted/80 last:border-0">
+                      <tr
+                        key={`${rowKey}-${i}`}
+                        tabIndex={0}
+                        className="cursor-pointer border-b border-border-muted/80 last:border-0 hover:bg-muted/35 focus-visible:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                        aria-label={`Open details for ${nameForA11y}`}
+                        onClick={onRowActivate}
+                        onKeyDown={onRowKeyDown}
+                      >
                         <td className="max-w-[12rem] px-3 py-2">
                           <div className="font-medium text-foreground">{s.name ?? "—"}</div>
                           {s.description ? (
@@ -697,27 +456,25 @@ export function SkillsPanel() {
                           {s.bundled ? " · bundled" : ""}
                           {s.blockedByAllowlist ? " · allowlist" : ""}
                         </td>
-                        <td className="px-3 py-2 text-xs">{eligible ? "yes" : "no"}</td>
+                        <td className="px-3 py-2 text-xs">
+                          <SkillStatusCell skill={s} />
+                        </td>
                         <td className="max-w-[18rem] px-3 py-2 font-mono text-[0.65rem] text-foreground/90">
                           <span className="break-all" title={s.filePath}>
                             {s.filePath ?? s.baseDir ?? "—"}
                           </span>
                         </td>
-                        <td className="px-3 py-2">
-                          <button type="button" className={btnClass} onClick={() => openInspector(s)}>
-                            View
-                          </button>
-                        </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                           {configKey ? (
-                            <button
-                              type="button"
-                              className={btnClass}
+                            <Switch
+                              checked={!disabled}
                               disabled={toggling}
-                              onClick={() => void onToggleSkillEnabled(configKey, disabled)}
-                            >
-                              {toggling ? "…" : disabled ? "Enable" : "Disable"}
-                            </button>
+                              aria-label={`${nameForA11y} skill`}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onCheckedChange={() => {
+                                void onToggleSkillEnabled(configKey, disabled);
+                              }}
+                            />
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
@@ -746,7 +503,9 @@ export function SkillsPanel() {
             <SheetDescription className="text-xs">
               {inspectSkill?.source ?? "—"}
               {inspectSkill?.bundled ? " · bundled" : ""}
-              {typeof inspectSkill?.eligible === "boolean" ? ` · eligible: ${inspectSkill.eligible ? "yes" : "no"}` : ""}
+              {inspectSkill
+                ? ` · ${skillRowStatus(inspectSkill).label === "Ready" ? "ready" : "not ready"}`
+                : ""}
             </SheetDescription>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5">
@@ -766,9 +525,8 @@ export function SkillsPanel() {
                 </button>
                 {inspectCopyNotice ? <p className="text-xs text-muted-foreground">{inspectCopyNotice}</p> : null}
                 <p className="text-[0.65rem] text-muted-foreground">
-                  The gateway does not stream full <code className="text-foreground">SKILL.md</code> in{" "}
-                  <code className="text-foreground">skills.status</code>. Open the file on the host, or use{" "}
-                  <span className="text-foreground">Local skill</span> above to author a copy here.
+                  The gateway may not include full <code className="text-foreground">SKILL.md</code> in{" "}
+                  <code className="text-foreground">skills.status</code>. Open the file on the host when needed.
                 </p>
               </section>
             )}
@@ -781,21 +539,6 @@ export function SkillsPanel() {
                 </pre>
               </section>
             ) : null}
-
-            <section className="mb-4 space-y-1">
-              <h3 className="text-xs font-medium text-label">ClawHub package</h3>
-              {inspectSlug ? (
-                <p className="text-[0.65rem] text-muted-foreground">
-                  Tried <code className="text-foreground">skills.detail</code> with slug{" "}
-                  <code className="text-foreground">{inspectSlug}</code> (metadata only — not the same as your local file).
-                </p>
-              ) : null}
-              {clawhubInspectLoading ? <p className="text-xs text-muted-foreground">Loading ClawHub…</p> : null}
-              {clawhubInspectErr ? <p className="text-xs text-err-text">{clawhubInspectErr}</p> : null}
-              {clawhubInspect != null && !clawhubInspectLoading ? (
-                <JsonPreview value={clawhubInspect} maxHeightClassName="max-h-48" />
-              ) : null}
-            </section>
 
             <details className="rounded-md border border-border-muted bg-surface-status/40">
               <summary className="cursor-pointer px-2 py-1.5 text-xs font-medium text-label">

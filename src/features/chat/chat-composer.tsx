@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useLayoutEffect, useCallback } from "react";
 import { ArrowUp, Square } from "lucide-react";
 
 export type ChatComposerProps = {
@@ -31,12 +31,18 @@ export function ChatComposer({
   const resize = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "auto";
+    // Drop any inline height so the CSS baseline (`min-h-[1.75rem]`) governs empty state.
+    // Without this, reading `scrollHeight` after a React-driven clear can return a stale
+    // value and re-pin the inline height at its previous max, leaving the box tall after send.
+    el.style.height = "";
+    if (!el.value) return;
     const maxH = LINE_HEIGHT * MAX_ROWS + PAD;
     el.style.height = `${Math.min(el.scrollHeight, maxH)}px`;
   }, []);
 
-  useEffect(() => resize(), [value, resize]);
+  // Use a layout effect so the box is measured before paint — otherwise we'd flash the
+  // previous (tall) height for one frame whenever `value` collapses to empty.
+  useLayoutEffect(() => resize(), [value, resize]);
 
   const canSend = !disabled && !sending && value.trim().length > 0;
 

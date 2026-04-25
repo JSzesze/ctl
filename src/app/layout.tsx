@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import Script from "next/script";
 import { AppShell } from "@/components/app-shell";
 import { ControlProvider } from "@/components/control-provider";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -26,12 +27,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={cn("dark", "font-sans", geist.variable)} suppressHydrationWarning>
-      <head>
-        <script
+      <head />
+      <body suppressHydrationWarning>
+        <Script
+          id="ctl-theme-init"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: getThemeInitScript() }}
         />
-      </head>
-      <body suppressHydrationWarning>
         <ThemeProvider>
           <ControlProvider>
             <AppShell>{children}</AppShell>

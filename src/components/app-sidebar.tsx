@@ -16,6 +16,7 @@ import {
   Settings2,
   Timer,
   Video,
+  Wallet,
 } from "lucide-react";
 import { useControlConnection } from "@/components/control-provider";
 import { ThemeCycleIconButton, ThemeToggle } from "@/components/theme-toggle";
@@ -45,6 +46,7 @@ const PRIMARY: Array<{ href: string; label: string; icon: typeof CalendarDays }>
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/meetings", label: "Meetings", icon: Video },
   { href: "/radar", label: "Radar", icon: ScanLine },
+  { href: "/finance", label: "Finance", icon: Wallet },
 ];
 
 const INTEGRATIONS: Array<{ href: string; label: string; icon: typeof Mic }> = [
